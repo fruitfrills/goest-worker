@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="ProjectModuleManager">
-    <modules>
-      <module fileurl="file://$PROJECT_DIR$/../goest-worker/.idea/goest-worker.iml" filepath="$PROJECT_DIR$/../goest-worker/.idea/goest-worker.iml" />
-    </modules>
-  </component>
-</project>
