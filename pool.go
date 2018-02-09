@@ -19,7 +19,7 @@ type dispatcher struct {
 // create pool of workers
 func NewPool(count int) *dispatcher {
 	Pool = dispatcher{
-		WorkerPool: 	make(workerPoolType),
+		WorkerPool: 	make(workerPoolType, count),
 		TaskQueue: 	make(chan *Task),
 	}
 	for i := 0; i < count; i++ {
@@ -44,7 +44,7 @@ func (D *dispatcher) AddPeriodicTask(interval time.Duration, task Task){
 }
 
 
-func (D *dispatcher) Run() {
+func (D *dispatcher) run() {
 	for {
 		select {
 		case task := <-D.TaskQueue:
@@ -56,21 +56,10 @@ func (D *dispatcher) Run() {
 
 
 func (D *dispatcher) Start () error {
-	go D.Run()
+	go D.run()
 	go D.periodicTasksProcessor()
 	return nil
 }
-
-
-func (D *dispatcher) Stop() error {
-	for _, quit := range D.WorkersPoolQuitChan {
-		quit <- true
-	}
-	close(D.TaskQueue)
-	close(D.WorkerPool)
-	return nil
-}
-
 
 
 func (D *dispatcher) periodicTasksProcessor(){
@@ -96,3 +85,15 @@ func (D *dispatcher) periodicTasksProcessor(){
 		}(task, quitChan)
 	}
 }
+
+
+
+func (D *dispatcher) Stop() error {
+	for _, quit := range D.WorkersPoolQuitChan {
+		quit <- true
+	}
+	close(D.TaskQueue)
+	close(D.WorkerPool)
+	return nil
+}
+

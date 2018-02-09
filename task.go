@@ -7,8 +7,10 @@ import (
 )
 
 type Task struct {
-	Task reflect.Value
-	Args []reflect.Value
+	task 		reflect.Value
+	args 		[]reflect.Value
+	results 	[]reflect.Value
+	done 		chan bool
 }
 
 type PeriodicTask struct {
@@ -42,7 +44,26 @@ func NewTask(taskFn interface{}, arguments ... interface{}) (task *Task, err err
 	}
 
 	return &Task{
-		Task: fn,
-		Args: in,
+		task: fn,
+		args: in,
+		done: make(chan bool),
 	}, nil
+}
+
+func (task *Task) Call() {
+	defer close(task.done)
+	task.results = task.task.Call(task.args)
+}
+
+func (task *Task) Wait () {
+	Pool.AddTask(task)
+	<- task.done
+}
+
+func (task *Task) Result() ([]interface{}) {
+	var result []interface{}
+	for _, res := range task.results {
+		result = append(result, res.Interface())
+	}
+	return result
 }

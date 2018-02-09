@@ -25,7 +25,7 @@ func (w *worker) tasksProcessor() {
 		w.WorkerPool <- w.Task
 		select {
 		case work := <-w.Task:
-			work.Task.Call(work.Args)
+			work.Call()
 		case <- w.QuitChan:
 			return
 		}
