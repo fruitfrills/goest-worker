@@ -40,10 +40,12 @@ func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 	D.WorkersPoolQuitChan = append(D.WorkersPoolQuitChan, quitChan)
 	go func() {
 		for {
+			var once bool;
 			var diff time.Duration;
 			switch arg.(type) {
 			case time.Time:
 				diff = arg.(time.Time).Sub(time.Now())
+				once = true // run at time
 			case time.Duration:
 				diff = arg.(time.Duration)
 			case *Schedule:
@@ -56,11 +58,14 @@ func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 			case <-time.After(diff):
 				task.Run().Wait()
 			}
+			if once{
+				return
+			}
 		}
 	}()
 }
 
-func (D *dispatcher) Start() {
+func (D *dispatcher) Start() (*dispatcher) {
 	go func() {
 		for {
 			select {
@@ -73,7 +78,7 @@ func (D *dispatcher) Start() {
 			}
 		}
 	}()
-	return
+	return D
 }
 
 func (D *dispatcher) Stop() {
