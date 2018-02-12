@@ -1,4 +1,4 @@
-### GOest-worker
+### Goest worker
 
 Simple implementation a queue
 
@@ -9,12 +9,17 @@ import (
   	"time"
 )
 
+func doSomething(a, b int) (int) {
+    return a + b
+}
+
 func main() {
-    dispatcher := worker.NewPool(10)                                    // count of workers
-    task, _ := worker.NewTask(func (arg string) {
-        fmt.Println(arg)
-    } (), "Hello, World!")                                              // create task
-    dispatcher.AddPeriodicTask(time.Second * 5, *task)                   // add periodic task
-    dispatcher.Start()                                                  // run
+    pool := worker.NewPool(10).Start()                                  // count of workers
+    task, _ := worker.NewTask(doSomething, 1, 2)                        // create task
+    results := task.Run().Wait().Results()                              // run, wait, result
+    summ := results[0].(int)
+    print(summ)                                                         // 3
 }
 ```
+
+see examples 
