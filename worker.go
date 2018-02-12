@@ -1,33 +1,45 @@
 package goest_worker
 
+type WorkerInterface interface {
+	start()
+	getQuitChan() (chan bool)
+}
+
 type worker struct {
-	ID         	int
-	WorkerPool 	workerPoolType
-	Task       	chan TaskInterface
-	QuitChan   	chan bool
+	task     chan TaskInterface
+	quitChan chan bool
 }
 
-func NewWorker(id int, workerQueue chan chan TaskInterface) *worker {
+func NewWorker() (WorkerInterface) {
 	return &worker{
-		ID:         id,
-		WorkerPool: workerQueue,
-		Task:       make(chan TaskInterface),
-		QuitChan:   make(chan bool),
+		task:     make(chan TaskInterface),
+		quitChan: make(chan bool),
 	}
 }
 
-func (w *worker) Start() {
-	go w.tasksProcessor()
+func (w *worker) getQuitChan() (chan bool) {
+	return w.quitChan
 }
 
-func (w *worker) tasksProcessor() {
-	for {
-		w.WorkerPool <- w.Task
-		select {
-		case work := <-w.Task:
-			work.call()
-		case <- w.QuitChan:
-			return
+func (w *worker) start() {
+	go func() {
+		for {
+			select {
+			case <-w.quitChan:
+				return
+			default:
+				Pool.WorkerPool <- w.task
+			}
+
+			select {
+			case work := <-w.task:
+				if work == nil {
+					return
+				}
+				work.call()
+			case <-w.quitChan:
+				return
+			}
 		}
-	}
+	}()
 }

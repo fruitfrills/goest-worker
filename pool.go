@@ -1,6 +1,9 @@
 package goest_worker
 
-import "time"
+import (
+	"time"
+	"fmt"
+)
 
 // channel of channel for balancing tasks between workers
 type workerPoolType chan chan TaskInterface
@@ -8,74 +11,77 @@ type workerPoolType chan chan TaskInterface
 var Pool dispatcher
 
 type dispatcher struct {
-	WorkerPool 				chan chan TaskInterface
-	TaskQueue  				chan TaskInterface
-	WorkersPoolQuitChan 	[]chan bool
+	WorkerPool          chan chan TaskInterface
+	TaskQueue           chan TaskInterface
+	WorkersPoolQuitChan []chan bool
 }
 
 // create pool of workers
 func NewPool(count int) *dispatcher {
 	Pool = dispatcher{
-		WorkerPool: 	make(workerPoolType, count),
-		TaskQueue: 	make(chan TaskInterface),
+		WorkerPool: make(workerPoolType, count),
+		TaskQueue:  make(chan TaskInterface),
 	}
 	for i := 0; i < count; i++ {
-		worker := NewWorker(i+1, Pool.WorkerPool)
-		Pool.WorkersPoolQuitChan = append(Pool.WorkersPoolQuitChan, worker.QuitChan)
-		worker.Start()
+		worker := NewWorker()
+		Pool.WorkersPoolQuitChan = append(Pool.WorkersPoolQuitChan, worker.getQuitChan())
+		worker.start()
 	}
 	return &Pool
 }
 
 // use with go
-func (D *dispatcher) AddTask(task TaskInterface){
+func (D *dispatcher) AddTask(task TaskInterface) {
 	D.TaskQueue <- task
 }
 
-func (D *dispatcher) addTicker(task TaskInterface, arg interface{})  {
+func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 	quitChan := make(chan bool)
 	D.WorkersPoolQuitChan = append(D.WorkersPoolQuitChan, quitChan)
 	go func() {
-		var diff time.Duration;
-		switch arg.(type) {
-		case time.Time:
-			diff = arg.(time.Time).Sub(time.Now())
-		case time.Duration:
-			diff = arg.(time.Duration)
-		case Schedule:
-			diff = arg.(*Schedule).Next()
-		}
-		select {
-			case <- time.After(diff):
-				Pool.AddTask(task)
-			case <-quitChan:
-				close(quitChan)
-				break
+		for {
+			var diff time.Duration;
+			switch arg.(type) {
+			case time.Time:
+				diff = arg.(time.Time).Sub(time.Now())
+			case time.Duration:
+				diff = arg.(time.Duration)
+			case *Schedule:
+				diff = arg.(*Schedule).Next()
+				fmt.Println(diff)
 			}
+			select {
+			case <- quitChan:
+				return 
+			case <-time.After(diff):
+				task.Run().Wait()
+			}
+		}
 	}()
 }
 
-func (D *dispatcher) Start () error {
+func (D *dispatcher) Start() {
 	go func() {
 		for {
 			select {
 			case task := <-D.TaskQueue:
+				if (task == nil) {
+					return
+				}
 				worker := <-D.WorkerPool
 				worker <- task
 			}
 		}
 	}()
-	return nil
+	return
 }
 
-
-
-func (D *dispatcher) Stop() error {
+func (D *dispatcher) Stop() {
 	for _, quit := range D.WorkersPoolQuitChan {
-		quit <- true
+		close(quit)
 	}
+	D.WorkersPoolQuitChan = [](chan bool){};
 	close(D.TaskQueue)
 	close(D.WorkerPool)
-	return nil
+	return
 }
-

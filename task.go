@@ -21,15 +21,19 @@ func (s *Schedule) Next() (time.Duration) {
 		next = next.AddDate(0,0, (7 - int((now.Weekday()))) + int(s.Weekday) )
 	}
 	next = time.Date(next.Year(), next.Month(), next.Day(), s.Hour, s.Minute, s.Second, s.NanoSecond, now.Location())
-	return now.Sub(next)
+	diff := next.Sub(now)
+	if diff < 0 {
+		diff += time.Hour * 24
+	}
+	return diff
 }
 
 type TaskInterface interface {
 	call()
-	Do() TaskInterface
+	Run() TaskInterface
 	Wait() TaskInterface
 	Result() []interface{}
-	Every(interface{}) TaskInterface
+	RunEvery(interface{}) TaskInterface
 }
 
 
@@ -52,7 +56,6 @@ func NewTask(taskFn interface{}, arguments ... interface{}) (task TaskInterface,
 
 	if fnType.Kind() != reflect.Func{
 		return nil, errors.New("Task is not func")
-
 	}
 
 	if fn.Type().NumIn() != len(arguments){
@@ -77,12 +80,12 @@ func (task *Task) call() {
 }
 
 
-func (task *Task) Every(arg interface{}) (TaskInterface) {
+func (task *Task) RunEvery(arg interface{}) (TaskInterface) {
 	Pool.addTicker(task, arg)
 	return task
 }
 
-func (task *Task) Do () (TaskInterface){
+func (task *Task) Run () (TaskInterface){
 	task.done = make(chan bool)
 	Pool.AddTask(task)
 	return task
