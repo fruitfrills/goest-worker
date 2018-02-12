@@ -22,4 +22,4 @@ func main() {
 }
 ```
 
-see examples 
+see examples https://github.com/yobayob/goest-worker/tree/master/examples 
