@@ -1,29 +1,51 @@
 package goest_worker
 
 import (
-	"time"
 	"reflect"
 	"errors"
+	"time"
 )
 
+type Schedule struct{
+	Weekday 	time.Weekday
+	Hour 		int
+	Minute		int
+	Second		int
+	NanoSecond  int
+}
+
+func (s *Schedule) Next() (time.Duration) {
+	now := time.Now()
+	next := now
+	if (now.Weekday() != s.Weekday) && s.Weekday != 0 {
+		next = next.AddDate(0,0, (7 - int((now.Weekday()))) + int(s.Weekday) )
+	}
+	next = time.Date(next.Year(), next.Month(), next.Day(), s.Hour, s.Minute, s.Second, s.NanoSecond, now.Location())
+	return now.Sub(next)
+}
+
+type TaskInterface interface {
+	call()
+	Do() TaskInterface
+	Wait() TaskInterface
+	Result() []interface{}
+	Every(interface{}) TaskInterface
+}
+
+
 type Task struct {
+	TaskInterface
 	task 		reflect.Value
 	args 		[]reflect.Value
 	results 	[]reflect.Value
 	done 		chan bool
 }
 
-type PeriodicTask struct {
-	Task
-	Period time.Duration
-}
-
-
 /**
 	task: function
 	arguments: arguments for this function
  */
-func NewTask(taskFn interface{}, arguments ... interface{}) (task *Task, err error) {
+func NewTask(taskFn interface{}, arguments ... interface{}) (task TaskInterface, err error) {
 
 	fn := reflect.ValueOf(taskFn)
 	fnType := fn.Type()
@@ -46,18 +68,29 @@ func NewTask(taskFn interface{}, arguments ... interface{}) (task *Task, err err
 	return &Task{
 		task: fn,
 		args: in,
-		done: make(chan bool),
 	}, nil
 }
 
-func (task *Task) Call() {
+func (task *Task) call() {
 	defer close(task.done)
 	task.results = task.task.Call(task.args)
 }
 
-func (task *Task) Wait () {
+
+func (task *Task) Every(arg interface{}) (TaskInterface) {
+	Pool.addTicker(task, arg)
+	return task
+}
+
+func (task *Task) Do () (TaskInterface){
+	task.done = make(chan bool)
 	Pool.AddTask(task)
+	return task
+}
+
+func (task *Task) Wait () (TaskInterface) {
 	<- task.done
+	return task
 }
 
 func (task *Task) Result() ([]interface{}) {

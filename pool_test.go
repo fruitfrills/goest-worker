@@ -29,8 +29,7 @@ func TestWait(t *testing.T) {
 	task, _ := NewTask(func (arg string) string {
 		return arg + ", World!"
 	}, "Hello")
-	task.Wait()
-	res := task.Result()[0].(string)
+	res := task.Do().Wait().Result()[0].(string)
 	if res != "Hello, World!" {
 		t.Fail()
 	}

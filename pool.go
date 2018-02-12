@@ -1,26 +1,23 @@
 package goest_worker
 
+import "time"
 
-import (
-	"time"
-)
 // channel of channel for balancing tasks between workers
-type workerPoolType chan chan *Task
+type workerPoolType chan chan TaskInterface
 
 var Pool dispatcher
 
 type dispatcher struct {
-	WorkerPool 				chan chan *Task
-	TaskQueue  				chan *Task
+	WorkerPool 				chan chan TaskInterface
+	TaskQueue  				chan TaskInterface
 	WorkersPoolQuitChan 	[]chan bool
-	PeriodicTasks 			[]PeriodicTask
 }
 
 // create pool of workers
 func NewPool(count int) *dispatcher {
 	Pool = dispatcher{
 		WorkerPool: 	make(workerPoolType, count),
-		TaskQueue: 	make(chan *Task),
+		TaskQueue: 	make(chan TaskInterface),
 	}
 	for i := 0; i < count; i++ {
 		worker := NewWorker(i+1, Pool.WorkerPool)
@@ -31,59 +28,44 @@ func NewPool(count int) *dispatcher {
 }
 
 // use with go
-func (D *dispatcher) AddTask(task *Task){
+func (D *dispatcher) AddTask(task TaskInterface){
 	D.TaskQueue <- task
 }
 
-// create periodic task and append its to dispatcher
-func (D *dispatcher) AddPeriodicTask(interval time.Duration, task Task){
-	D.PeriodicTasks = append(D.PeriodicTasks, PeriodicTask{
-		Task: task,
-		Period: interval,
-	})
-}
-
-
-func (D *dispatcher) run() {
-	for {
-		select {
-		case task := <-D.TaskQueue:
-			worker := <-D.WorkerPool
-			worker <- task
+func (D *dispatcher) addTicker(task TaskInterface, arg interface{})  {
+	quitChan := make(chan bool)
+	D.WorkersPoolQuitChan = append(D.WorkersPoolQuitChan, quitChan)
+	go func() {
+		var diff time.Duration;
+		switch arg.(type) {
+		case time.Time:
+			diff = arg.(time.Time).Sub(time.Now())
+		case time.Duration:
+			diff = arg.(time.Duration)
+		case Schedule:
+			diff = arg.(*Schedule).Next()
 		}
-	}
+		select {
+			case <- time.After(diff):
+				Pool.AddTask(task)
+			case <-quitChan:
+				close(quitChan)
+				break
+			}
+	}()
 }
-
 
 func (D *dispatcher) Start () error {
-	go D.run()
-	go D.periodicTasksProcessor()
-	return nil
-}
-
-
-func (D *dispatcher) periodicTasksProcessor(){
-	for _, task := range D.PeriodicTasks{
-		quitChan := make(chan bool)
-
-		// add to begin
-		D.WorkersPoolQuitChan = append([](chan bool){quitChan,}, D.WorkersPoolQuitChan ... )
-		go func(t PeriodicTask, q chan bool) {
-			for {
-				select {
-				case Pool.TaskQueue <- &t.Task:
-				case <- q:
-					return
-				}
-				select {
-				case <-time.After(t.Period):
-					continue
-				case <- q:
-					return
-				}
+	go func() {
+		for {
+			select {
+			case task := <-D.TaskQueue:
+				worker := <-D.WorkerPool
+				worker <- task
 			}
-		}(task, quitChan)
-	}
+		}
+	}()
+	return nil
 }
 
 
