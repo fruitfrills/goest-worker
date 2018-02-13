@@ -25,13 +25,13 @@ func everyMonday(name string) {
 
 func main()  {
 	pool := worker.NewPool(runtime.NumCPU()).Start()
-	task, err := worker.NewTask(simplePeriodicTask, 2, 256)
+	task, err := worker.NewJob(simplePeriodicTask, 2, 256)
 	if err != nil {
 		panic(err)
 	}
 	task.RunEvery(5 * time.Second)					// run every 5 second
 
-	task, err = worker.NewTask(everyMonday, "Evgenyi")
+	task, err = worker.NewJob(everyMonday, "Evgenyi")
 	if err != nil {
 		panic(err)
 	}
