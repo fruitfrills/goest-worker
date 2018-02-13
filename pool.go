@@ -2,45 +2,62 @@ package goest_worker
 
 import (
 	"time"
-	"fmt"
 )
 
 // channel of channel for balancing tasks between workers
-type workerPoolType chan chan TaskInterface
+type workerPoolType chan chan Job
 
 var Pool dispatcher
 
+type DispatcherInterface interface {
+	Start() (DispatcherInterface)
+	Stop() (DispatcherInterface)
+	AddTask(job Job)
+	addTicker(job Job, arg interface{})
+}
+
+// main wrapper over workers pool
 type dispatcher struct {
-	WorkerPool          chan chan TaskInterface
-	TaskQueue           chan TaskInterface
-	WorkersPoolQuitChan []chan bool
+	DispatcherInterface
+
+	// can getting free worker from this chann
+	workerPool          chan chan Job
+
+	// put job
+	jobQueue           chan Job
+
+	// slice of quit channel for soft finish
+	workersPoolQuitChan []chan bool
 }
 
 // create pool of workers
-func NewPool(count int) *dispatcher {
+func NewPool(count int) (DispatcherInterface) {
 	Pool = dispatcher{
-		WorkerPool: make(workerPoolType, count),
-		TaskQueue:  make(chan TaskInterface),
+		workerPool: make(workerPoolType, count),
+		jobQueue:  make(chan Job),
 	}
+
+	// use numCPU
 	for i := 0; i < count; i++ {
 		worker := NewWorker()
-		Pool.WorkersPoolQuitChan = append(Pool.WorkersPoolQuitChan, worker.getQuitChan())
+		Pool.workersPoolQuitChan = append(Pool.workersPoolQuitChan, worker.getQuitChan())
 		worker.start()
 	}
 	return &Pool
 }
 
-// use with go
-func (D *dispatcher) AddTask(task TaskInterface) {
-	D.TaskQueue <- task
+// put task to queue
+func (D *dispatcher) addTask(task Job) {
+	D.jobQueue <- task
 }
 
-func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
+// create periodic tasks
+func (D *dispatcher) addTicker(task Job, arg interface{}) {
 	quitChan := make(chan bool)
-	D.WorkersPoolQuitChan = append(D.WorkersPoolQuitChan, quitChan)
+	D.workersPoolQuitChan = append(D.workersPoolQuitChan, quitChan)
 	go func() {
 		for {
-			var once bool;
+			var once bool; // run once at time
 			var diff time.Duration;
 			switch arg.(type) {
 			case time.Time:
@@ -50,7 +67,6 @@ func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 				diff = arg.(time.Duration)
 			case *Schedule:
 				diff = arg.(*Schedule).Next()
-				fmt.Println(diff)
 			}
 			select {
 			case <- quitChan:
@@ -58,6 +74,7 @@ func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 			case <-time.After(diff):
 				task.Run().Wait()
 			}
+			// break
 			if once{
 				return
 			}
@@ -65,15 +82,17 @@ func (D *dispatcher) addTicker(task TaskInterface, arg interface{}) {
 	}()
 }
 
-func (D *dispatcher) Start() (*dispatcher) {
+func (D *dispatcher) Start() (DispatcherInterface) {
 	go func() {
 		for {
 			select {
-			case task := <-D.TaskQueue:
-				if (task == nil) {
+			case task := <-D.jobQueue:
+				// if close channel
+				if task == nil { 
 					return
 				}
-				worker := <-D.WorkerPool
+				// get worker and send task
+				worker := <-D.workerPool
 				worker <- task
 			}
 		}
@@ -81,12 +100,13 @@ func (D *dispatcher) Start() (*dispatcher) {
 	return D
 }
 
-func (D *dispatcher) Stop() {
-	for _, quit := range D.WorkersPoolQuitChan {
+// close all channels, stopping workers and periodic tasks
+func (D *dispatcher) Stop() (DispatcherInterface) {
+	for _, quit := range D.workersPoolQuitChan {
 		close(quit)
 	}
-	D.WorkersPoolQuitChan = [](chan bool){};
-	close(D.TaskQueue)
-	close(D.WorkerPool)
-	return
+	D.workersPoolQuitChan = [](chan bool){};
+	close(D.jobQueue)
+	close(D.workerPool)
+	return D
 }
