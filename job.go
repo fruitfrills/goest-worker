@@ -6,20 +6,15 @@ import (
 	"sync/atomic"
 )
 
-const (
-	JOB_WAITING int32 = iota
-	JOB_SUCCESS
-	JOB_ERROR
-	JOB_DROPPED
-	JOB_PERIODIC
-)
+var ErrrorJobDropped = errors.New("job is dropped")
+var ErrorJobPanic = errors.New("job is panic")
 
 type Job interface {
 	call()
 	Run() Job
 	RunEvery(interface{}) Job
 	Wait() Job
-	Result() []interface{}
+	Result() (error, []interface{})
 
 	drop() Job
 }
@@ -30,6 +25,7 @@ type jobFunc struct {
 	args    		[]reflect.Value
 	results 		[]reflect.Value
 	done    		chan bool
+	error			error
 
 	// job states
 	// while without mutex
@@ -59,7 +55,6 @@ func NewJob(taskFn interface{}, arguments ... interface{}) (task Job, err error)
 	return &jobFunc{
 		fn: fn,
 		args: in,
-		state: JOB_WAITING,
 	}, nil
 }
 
@@ -77,15 +72,20 @@ func (job *jobFunc) call() {
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
-			job.setState(JOB_ERROR)
+			var err error
+			switch e := r.(type) {
+			case string:
+				err = errors.New(e)
+			case error:
+				err = e
+			default:
+				err = ErrorJobPanic
+			}
+			job.error = err
 		}
 		close(job.done)
 	}()
-
 	job.results = job.fn.Call(job.args)
-	if job.getState() != JOB_PERIODIC {
-		job.setState(JOB_SUCCESS)
-	}
 }
 
 // open `done` channel and add task to queue of tasks
@@ -97,7 +97,6 @@ func (task *jobFunc) Run() (Job) {
 
 // run task every. arg may be string (cron like), time.Duration and time.time
 func (job *jobFunc) RunEvery(arg interface{}) (Job) {
-	job.setState(JOB_PERIODIC)
 	Pool.addTicker(job, arg)
 	return job
 }
@@ -110,16 +109,16 @@ func (job *jobFunc) Wait() (Job) {
 
 // dropping job
 func (job *jobFunc) drop () (Job) {
+	job.error = ErrrorJobDropped
 	job.done <- false
-	job.setState(JOB_DROPPED)
 	return job
 }
 
 // get slice of results
-func (job *jobFunc) Result() ([]interface{}) {
+func (job *jobFunc) Result() (error, []interface{}) {
 	var result []interface{}
 	for _, res := range job.results {
 		result = append(result, res.Interface())
 	}
-	return result
+	return job.error, result
 }

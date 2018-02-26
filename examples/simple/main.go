@@ -21,7 +21,10 @@ func main()  {
 	if err != nil {
 		panic(err)
 	}
-	results := task.Run().Wait().Result()
+	err, results := task.Run().Wait().Result()
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("result is", results[0].(int))
 	pool.Stop()
 }

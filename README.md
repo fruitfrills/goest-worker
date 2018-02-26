@@ -2,15 +2,17 @@
 
 Simple implementation a queue
 
-### Getting started
+## Installation
 
-```
+To install goest-worker, use
+
+```sh
 go get github.com/yobayob/goest-worker
 ```
 
-### Basic usage
+## Getting started
 
-```
+```go
 package main
 
 import (
@@ -19,6 +21,10 @@ import (
 	"fmt"
 )
 
+/*
+Simple task with parameters and results
+You can getting results by method `Results()` task.Run().Wait().Results()
+ */
 func sum(a, b int) (int) {
 	fmt.Printf("%d + %d = %d \n", a, b, a+b)
 	return a+b
@@ -30,7 +36,10 @@ func main()  {
 	if err != nil {
 		panic(err)
 	}
-	results := task.Run().Wait().Result()
+	err, results := task.Run().Wait().Result()
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("result is", results[0].(int))
 	pool.Stop()
 }
