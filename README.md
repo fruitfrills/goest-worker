@@ -32,7 +32,7 @@ func sum(a, b int) (int) {
 
 func main()  {
 	pool := worker.NewPool(runtime.NumCPU()).Start()  	// create workers pool
-	task, err := worker.NewJob(sum, 2, 256)
+	task, err := pool.NewJob(sum, 2, 256)
 	if err != nil {
 		panic(err)
 	}
