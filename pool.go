@@ -98,7 +98,7 @@ func (D *dispatcher) addTicker(task Job, arg interface{}) {
 			case <-quitChan:
 				return
 			case <-time.After(diff):
-				task.Run().Wait()
+				task.Run()
 			}
 			// break
 			if once {
