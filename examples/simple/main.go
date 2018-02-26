@@ -11,7 +11,6 @@ Simple task with parameters and results
 You can getting results by method `Results()` task.Run().Wait().Results()
  */
 func sum(a, b int) (int) {
-	fmt.Printf("%d + %d = %d \n", a, b, a+b)
 	return a+b
 }
 
