@@ -7,6 +7,9 @@ import (
     "github.com/gorhill/cronexpr"
 )
 
+// default pool
+var MainPool = New()
+
 // pool states
 const (
 	POOL_STOPPED int32 = iota
@@ -16,20 +19,20 @@ const (
 // channel of channel for balancing tasks between workers
 type workerPoolType chan chan Job
 
-var Pool dispatcher
+type PoolInterface interface {
+	Start(count int) (PoolInterface)
+	Stop() (PoolInterface)
+	NewJob(taskFn interface{}, arguments ... interface{}) (Job, error)
 
-type DispatcherInterface interface {
-	Start() (DispatcherInterface)
-	Stop() (DispatcherInterface)
 	AddTask(job Job)
 	addTicker(job Job, arg interface{})
 }
 
 // main wrapper over workers pool
-type dispatcher struct {
-	DispatcherInterface
+type pool struct {
+	PoolInterface
 
-	// can getting free worker from this chann
+	// can getting free worker from this chan
 	workerPool chan chan Job
 
 	// pool's state
@@ -46,42 +49,32 @@ type dispatcher struct {
 }
 
 // create pool of workers
-func NewPool(count int) (DispatcherInterface) {
-	Pool = dispatcher{
-		workerPool: make(workerPoolType, count),
-		jobQueue:   make(chan Job),
+func New() (PoolInterface) {
+	return &pool{
 		stateMutex: &sync.Mutex{},
+		state: POOL_STOPPED,
 	}
-
-	// use numCPU
-	for i := 0; i < count; i++ {
-		worker := NewWorker()
-		Pool.workersPoolQuitChan = append(Pool.workersPoolQuitChan, worker.getQuitChan())
-		worker.start()
-	}
-	return &Pool
 }
 
-// put task to queue
-func (D *dispatcher) addTask(task Job) {
-
-	D.stateMutex.Lock()
-	defer D.stateMutex.Unlock()
+// put job to queue
+func (p *pool) AddTask(task Job) {
+	p.stateMutex.Lock()
+	defer p.stateMutex.Unlock()
 
 	// check state
-	// is disptatcher is stopped, job is dropped ...
-	if D.isStopped() {
+	// is pool is stopped, job is dropped ...
+	if p.isStopped() {
 		task.drop()
 		return
 	}
-	D.jobQueue <- task
+	p.jobQueue <- task
 }
 
 // create periodic tasks
 // TODO: use list of periodic tasks
-func (D *dispatcher) addTicker(task Job, arg interface{}) {
+func (p *pool) addTicker(task Job, arg interface{}) {
 	quitChan := make(chan bool)
-	D.workersPoolQuitChan = append(D.workersPoolQuitChan, quitChan)
+	p.workersPoolQuitChan = append(p.workersPoolQuitChan, quitChan)
 	go func() {
 		for {
 
@@ -115,68 +108,85 @@ func (D *dispatcher) addTicker(task Job, arg interface{}) {
 }
 
 // check state
-func (D *dispatcher) isStopped() (bool) {
-	return atomic.LoadInt32(&(D.state)) == POOL_STOPPED
+func (p *pool) isStopped() (bool) {
+	return atomic.LoadInt32(&(p.state)) == POOL_STOPPED
 }
 
 // set state
-func (D *dispatcher) setState(state int32) () {
-	atomic.StoreInt32(&(D.state), int32(state))
+func (p *pool) setState(state int32) () {
+	atomic.StoreInt32(&(p.state), int32(state))
 }
 
 // start dispatcher
-func (D *dispatcher) Start() (DispatcherInterface) {
-
+func (p *pool) Start(count int) (PoolInterface) {
 	// lock for start
-	D.stateMutex.Lock()
-	defer D.stateMutex.Unlock()
+	p.stateMutex.Lock()
+	defer p.stateMutex.Unlock()
 
 	// if dispatcher started - do nothing
-	if !D.isStopped() {
-		return D
+	if !p.isStopped() {
+		return p
 	}
 
+	p.jobQueue = make(chan Job)
+	p.workerPool = make(workerPoolType, count)
+	for i := 0; i < count; i++ {
+		worker := NewWorker(p.workerPool)
+		p.workersPoolQuitChan = append(p.workersPoolQuitChan, worker.getQuitChan())
+		worker.start()
+	}
 	// main process
 	go func() {
 		for {
 			select {
-			case task := <-D.jobQueue:
+			case task := <-p.jobQueue:
 				// if close channel
 				if task == nil {
 					return
 				}
 				// get worker and send task
-				worker := <-D.workerPool
+				worker := <-p.workerPool
 				worker <- task
 			}
 		}
 	}()
 
 	// set state to started
-	D.setState(POOL_STARTED)
-	return D
+	p.setState(POOL_STARTED)
+	return p
 }
 
 // close all channels, stopping workers and periodic tasks
-// if the dispatcher is restarted, all tasks will be stopped. You need starts tasks again ...
-func (D *dispatcher) Stop() (DispatcherInterface) {
+// if the dispatcher is restarted, all tasks will be stoppep. You need starts tasks again ...
+func (p *pool) Stop() (PoolInterface) {
 
 	// lock for stop
-	D.stateMutex.Lock()
-	defer D.stateMutex.Unlock()
+	p.stateMutex.Lock()
+	defer p.stateMutex.Unlock()
 	// if dispatcher stopped - do nothing
-	if D.isStopped() {
-		return D
+	if p.isStopped() {
+		return p
 	}
 	// send close to all quit channels
-	for _, quit := range D.workersPoolQuitChan {
+	for _, quit := range p.workersPoolQuitChan {
 		close(quit)
 	}
-	D.workersPoolQuitChan = [](chan bool){};
-	close(D.jobQueue)
-	close(D.workerPool)
+	p.workersPoolQuitChan = [](chan bool){};
+	close(p.jobQueue)
+	close(p.workerPool)
 
 	// set state to stopped
-	D.setState(POOL_STOPPED)
-	return D
+	p.setState(POOL_STOPPED)
+	return p
+}
+
+// create job for current pool
+func (p *pool) NewJob(taskFn interface{}, arguments ... interface{})(task Job, err error){
+	task, err = NewJob(taskFn, arguments ... )
+	if err != nil {
+		return
+
+	}
+	task.(*jobFunc).pool = p
+	return
 }

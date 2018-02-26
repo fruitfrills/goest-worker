@@ -6,14 +6,16 @@ type WorkerInterface interface {
 }
 
 type worker struct {
-	task     chan Job
-	quitChan chan bool
+	task     		chan Job
+	quitChan 		chan bool
+	workerPool		workerPoolType
 }
 
-func NewWorker() (WorkerInterface) {
+func NewWorker(workerPool workerPoolType) (WorkerInterface) {
 	return &worker{
 		task:     make(chan Job),
 		quitChan: make(chan bool),
+		workerPool: workerPool,
 	}
 }
 
@@ -28,7 +30,7 @@ func (w *worker) start() {
 			case <-w.quitChan:
 				return
 			default:
-				Pool.workerPool <- w.task
+				w.workerPool <- w.task
 			}
 			select {
 			case work := <-w.task:

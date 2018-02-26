@@ -24,7 +24,7 @@ func everyMonday(name string) {
 }
 
 func main()  {
-	pool := worker.NewPool(runtime.NumCPU()).Start()
+	pool := worker.MainPool.Start(runtime.NumCPU())
 	task, err := worker.NewJob(simplePeriodicTask, 2, 256)
 	if err != nil {
 		panic(err)

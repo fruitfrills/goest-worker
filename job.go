@@ -9,22 +9,35 @@ var ErrorJobDropped = errors.New("job is dropped")
 var ErrorJobPanic = errors.New("job is panic")
 
 type Job interface {
-	call()
 	Run() Job
 	RunEvery(interface{}) Job
 	Wait() Job
-	Result() (error, []interface{})
+	Result() ([]interface{}, error)
 
+	call() Job
 	drop() Job
 }
 
 type jobFunc struct {
 	Job
+
+	// main func
 	fn    			reflect.Value
+
+	// argument for func
 	args    		[]reflect.Value
+
+	// result after calling func
 	results 		[]reflect.Value
+
+	// done channel for waiting
 	done    		chan bool
+
+	// for catching panic
 	error			error
+
+	// dispatcher
+	pool 			PoolInterface
 }
 
 // create simple jobs
@@ -50,11 +63,12 @@ func NewJob(taskFn interface{}, arguments ... interface{}) (task Job, err error)
 	return &jobFunc{
 		fn: fn,
 		args: in,
+		pool: MainPool,
 	}, nil
 }
 
 // calling func and close channel
-func (job *jobFunc) call() {
+func (job *jobFunc) call() Job {
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
@@ -72,18 +86,19 @@ func (job *jobFunc) call() {
 		close(job.done)
 	}()
 	job.results = job.fn.Call(job.args)
+	return job
 }
 
 // open `done` channel and add task to queue of tasks
-func (task *jobFunc) Run() (Job) {
-	task.done = make(chan bool)
-	Pool.addTask(task)
-	return task
+func (job *jobFunc) Run() (Job) {
+	job.done = make(chan bool)
+	job.pool.AddTask(job)
+	return job
 }
 
 // run task every. arg may be string (cron like), time.Duration and time.time
 func (job *jobFunc) RunEvery(arg interface{}) (Job) {
-	Pool.addTicker(job, arg)
+	job.pool.addTicker(job, arg)
 	return job
 }
 
@@ -101,10 +116,10 @@ func (job *jobFunc) drop () (Job) {
 }
 
 // get slice of results
-func (job *jobFunc) Result() (error, []interface{}) {
+func (job *jobFunc) Result() ([]interface{}, error) {
 	var result []interface{}
 	for _, res := range job.results {
 		result = append(result, res.Interface())
 	}
-	return job.error, result
+	return result, job.error
 }

@@ -4,6 +4,7 @@ import (
 	worker "goest-worker" // "github.com/yobayob/goest-worker"
 	"runtime"
 	"fmt"
+	"time"
 )
 
 /*
@@ -15,12 +16,12 @@ func sum(a, b int) (int) {
 }
 
 func main()  {
-	pool := worker.NewPool(runtime.NumCPU()).Start()  	// create workers pool
-	task, err := worker.NewJob(sum, 2, 256)
+	pool := worker.New().Start(runtime.NumCPU())  	// create workers pool
+	task, err := pool.NewJob(sum, 2, 256)
 	if err != nil {
 		panic(err)
 	}
-	err, results := task.Run().Wait().Result()
+	results, err := task.Run().Wait().Result()
 	if err != nil {
 		panic(err)
 	}
