@@ -4,6 +4,7 @@ import (
 	"time"
 	"sync/atomic"
 	"sync"
+    "github.com/gorhill/cronexpr"
 )
 
 
@@ -78,21 +79,27 @@ func (D *dispatcher) addTask(task Job) {
 }
 
 // create periodic tasks
+// TODO: use list of periodic tasks
 func (D *dispatcher) addTicker(task Job, arg interface{}) {
 	quitChan := make(chan bool)
 	D.workersPoolQuitChan = append(D.workersPoolQuitChan, quitChan)
 	go func() {
 		for {
-			var once bool; // run once at time
-			var diff time.Duration;
+
+			var (
+				once bool; // run once at time
+				diff time.Duration
+				now = time.Now()
+			)
+
 			switch arg.(type) {
 			case time.Time:
-				diff = arg.(time.Time).Sub(time.Now())
+				diff = arg.(time.Time).Sub(now)
 				once = true // run at time
 			case time.Duration:
 				diff = arg.(time.Duration)
-			case *Schedule:
-				diff = arg.(*Schedule).Next()
+			case string:
+				diff = cronexpr.MustParse(arg.(string)).Next(now).Sub(now)
 			}
 			select {
 			case <-quitChan:

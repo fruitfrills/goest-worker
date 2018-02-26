@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 )
 
-var ErrrorJobDropped = errors.New("job is dropped")
+var ErrorJobDropped = errors.New("job is dropped")
 var ErrorJobPanic = errors.New("job is panic")
 
 type Job interface {
@@ -68,7 +68,6 @@ func (job *jobFunc) getState() (int32) {
 
 // calling func and close channel
 func (job *jobFunc) call() {
-
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
@@ -109,7 +108,7 @@ func (job *jobFunc) Wait() (Job) {
 
 // dropping job
 func (job *jobFunc) drop () (Job) {
-	job.error = ErrrorJobDropped
+	job.error = ErrorJobDropped
 	job.done <- false
 	return job
 }

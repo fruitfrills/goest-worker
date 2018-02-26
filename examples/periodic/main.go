@@ -35,11 +35,7 @@ func main()  {
 	if err != nil {
 		panic(err)
 	}
-	task.RunEvery(&worker.Schedule{
-		Weekday: time.Monday,
-		Hour: 12,
-		Minute: 30,
-	})												// run monday at 12:30
+	task.RunEvery("@hourly")						// run monday at 12:30
 	<- time.After(30 * time.Second)
 	pool.Stop()										// stop pool
 }
