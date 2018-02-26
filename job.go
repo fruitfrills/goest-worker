@@ -3,7 +3,6 @@ package goest_worker
 import (
 	"reflect"
 	"errors"
-	"sync/atomic"
 )
 
 var ErrorJobDropped = errors.New("job is dropped")
@@ -26,10 +25,6 @@ type jobFunc struct {
 	results 		[]reflect.Value
 	done    		chan bool
 	error			error
-
-	// job states
-	// while without mutex
-	state 			int32
 }
 
 // create simple jobs
@@ -56,14 +51,6 @@ func NewJob(taskFn interface{}, arguments ... interface{}) (task Job, err error)
 		fn: fn,
 		args: in,
 	}, nil
-}
-
-func (job *jobFunc) setState(state int32) () {
-	atomic.StoreInt32(&(job.state), int32(state))
-}
-
-func (job *jobFunc) getState() (int32) {
-	return atomic.LoadInt32(&(job.state))
 }
 
 // calling func and close channel

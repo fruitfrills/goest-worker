@@ -7,7 +7,6 @@ import (
     "github.com/gorhill/cronexpr"
 )
 
-
 // pool states
 const (
 	POOL_STOPPED int32 = iota
