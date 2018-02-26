@@ -30,7 +30,6 @@ func (w *worker) start() {
 			default:
 				Pool.workerPool <- w.task
 			}
-
 			select {
 			case work := <-w.task:
 				if work == nil {

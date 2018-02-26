@@ -2,6 +2,15 @@ package goest_worker
 
 import (
 	"time"
+	"sync/atomic"
+	"sync"
+)
+
+
+// pool states
+const (
+	POOL_STOPPED int32 = iota
+	POOL_STARTED
 )
 
 // channel of channel for balancing tasks between workers
@@ -21,10 +30,16 @@ type dispatcher struct {
 	DispatcherInterface
 
 	// can getting free worker from this chann
-	workerPool          chan chan Job
+	workerPool chan chan Job
+
+	// pool's state
+	state int32
+
+	// state mutex
+	stateMutex *sync.Mutex
 
 	// put job
-	jobQueue           chan Job
+	jobQueue chan Job
 
 	// slice of quit channel for soft finish
 	workersPoolQuitChan []chan bool
@@ -34,7 +49,8 @@ type dispatcher struct {
 func NewPool(count int) (DispatcherInterface) {
 	Pool = dispatcher{
 		workerPool: make(workerPoolType, count),
-		jobQueue:  make(chan Job),
+		jobQueue:   make(chan Job),
+		stateMutex: &sync.Mutex{},
 	}
 
 	// use numCPU
@@ -48,6 +64,16 @@ func NewPool(count int) (DispatcherInterface) {
 
 // put task to queue
 func (D *dispatcher) addTask(task Job) {
+
+	D.stateMutex.Lock()
+	defer D.stateMutex.Unlock()
+
+	// check state
+	// is disptatcher is stopped, job is dropped ...
+	if D.isStopped() {
+		task.drop()
+		return
+	}
 	D.jobQueue <- task
 }
 
@@ -69,26 +95,48 @@ func (D *dispatcher) addTicker(task Job, arg interface{}) {
 				diff = arg.(*Schedule).Next()
 			}
 			select {
-			case <- quitChan:
-				return 
+			case <-quitChan:
+				return
 			case <-time.After(diff):
 				task.Run().Wait()
 			}
 			// break
-			if once{
+			if once {
 				return
 			}
 		}
 	}()
 }
 
+// check state
+func (D *dispatcher) isStopped() (bool) {
+	return atomic.LoadInt32(&(D.state)) == POOL_STOPPED
+}
+
+// set state
+func (D *dispatcher) setState(state int32) () {
+	atomic.StoreInt32(&(D.state), int32(state))
+}
+
+// start dispatcher
 func (D *dispatcher) Start() (DispatcherInterface) {
+
+	// lock for start
+	D.stateMutex.Lock()
+	defer D.stateMutex.Unlock()
+
+	// if dispatcher started - do nothing
+	if !D.isStopped() {
+		return D
+	}
+
+	// main process
 	go func() {
 		for {
 			select {
 			case task := <-D.jobQueue:
 				// if close channel
-				if task == nil { 
+				if task == nil {
 					return
 				}
 				// get worker and send task
@@ -97,16 +145,32 @@ func (D *dispatcher) Start() (DispatcherInterface) {
 			}
 		}
 	}()
+
+	// set state to started
+	D.setState(POOL_STARTED)
 	return D
 }
 
 // close all channels, stopping workers and periodic tasks
+// if the dispatcher is restarted, all tasks will be stopped. You need starts tasks again ...
 func (D *dispatcher) Stop() (DispatcherInterface) {
+
+	// lock for stop
+	D.stateMutex.Lock()
+	defer D.stateMutex.Unlock()
+	// if dispatcher stopped - do nothing
+	if D.isStopped() {
+		return D
+	}
+	// send close to all quit channels
 	for _, quit := range D.workersPoolQuitChan {
 		close(quit)
 	}
 	D.workersPoolQuitChan = [](chan bool){};
 	close(D.jobQueue)
 	close(D.workerPool)
+
+	// set state to stopped
+	D.setState(POOL_STOPPED)
 	return D
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	worker "github.com/yobayob/goest-worker"
+	worker "goest-worker" // "github.com/yobayob/goest-worker"
 	"runtime"
 	"time"
 	"fmt"
