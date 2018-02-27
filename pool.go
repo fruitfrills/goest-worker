@@ -4,7 +4,8 @@ import (
 	"time"
 	"sync/atomic"
 	"sync"
-    "github.com/gorhill/cronexpr"
+	"github.com/gorhill/cronexpr"
+	"sort"
 )
 
 // default pool
@@ -17,15 +18,15 @@ const (
 )
 
 // channel of channel for balancing tasks between workers
-type workerPoolType chan chan Job
+type workerPoolType chan chan JobInstance
 
 type PoolInterface interface {
 	Start(count int) (PoolInterface)
 	Stop() (PoolInterface)
-	NewJob(taskFn interface{}, arguments ... interface{}) (Job, error)
+	NewJob(taskFn interface{}) (Job)
 
-	AddTask(job Job)
-	addTicker(job Job, arg interface{})
+	addJobToPool(job JobInstance)
+	addPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob)
 }
 
 // main wrapper over workers pool
@@ -33,7 +34,7 @@ type pool struct {
 	PoolInterface
 
 	// can getting free worker from this chan
-	workerPool chan chan Job
+	workerPool chan chan JobInstance
 
 	// pool's state
 	state int32
@@ -42,22 +43,29 @@ type pool struct {
 	stateMutex *sync.Mutex
 
 	// put job
-	jobQueue chan Job
+	jobQueue chan JobInstance
 
 	// slice of quit channel for soft finish
 	workersPoolQuitChan []chan bool
+
+	// periodic jobs
+	periodicJob []PeriodicJob
+
+	// periodic mutex
+	periodicMutex *sync.RWMutex
 }
 
 // create pool of workers
 func New() (PoolInterface) {
 	return &pool{
-		stateMutex: &sync.Mutex{},
-		state: POOL_STOPPED,
+		stateMutex:    &sync.Mutex{},
+		periodicMutex: &sync.RWMutex{},
+		state:         POOL_STOPPED,
 	}
 }
 
 // put job to queue
-func (p *pool) AddTask(task Job) {
+func (p *pool) addJobToPool(task JobInstance) {
 	p.stateMutex.Lock()
 	defer p.stateMutex.Unlock()
 
@@ -70,41 +78,30 @@ func (p *pool) AddTask(task Job) {
 	p.jobQueue <- task
 }
 
-// create periodic tasks
-// TODO: use list of periodic tasks
-func (p *pool) addTicker(task Job, arg interface{}) {
-	quitChan := make(chan bool)
-	p.workersPoolQuitChan = append(p.workersPoolQuitChan, quitChan)
-	go func() {
-		for {
-
-			var (
-				once bool; // run once at time
-				diff time.Duration
-				now = time.Now()
-			)
-
-			switch arg.(type) {
-			case time.Time:
-				diff = arg.(time.Time).Sub(now)
-				once = true // run at time
-			case time.Duration:
-				diff = arg.(time.Duration)
-			case string:
-				diff = cronexpr.MustParse(arg.(string)).Next(now).Sub(now)
-			}
-			select {
-			case <-quitChan:
-				return
-			case <-time.After(diff):
-				task.Run()
-			}
-			// break
-			if once {
-				return
-			}
+func (p *pool) addPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob) {
+	p.periodicMutex.Lock()
+	defer p.periodicMutex.Unlock()
+	var pJob PeriodicJob
+	switch period.(type) {
+	case time.Duration:
+		pJob = &timeDurationPeriodicJob{
+			job:      job,
+			duration: period.(time.Duration),
+			last:     time.Now(),
+			args: 	  arguments,
 		}
-	}()
+		p.periodicJob = append(p.periodicJob, )
+	case string:
+		pJob = &cronPeriodicJob{
+			job:  job,
+			expr: cronexpr.MustParse(period.(string)),
+			args: 	  arguments,
+		}
+	default:
+		panic("unknown period")
+	}
+	p.periodicJob = append(p.periodicJob, pJob)
+	return pJob
 }
 
 // check state
@@ -128,7 +125,7 @@ func (p *pool) Start(count int) (PoolInterface) {
 		return p
 	}
 
-	p.jobQueue = make(chan Job)
+	p.jobQueue = make(chan JobInstance)
 	p.workerPool = make(workerPoolType, count)
 	for i := 0; i < count; i++ {
 		worker := NewWorker(p.workerPool)
@@ -148,6 +145,59 @@ func (p *pool) Start(count int) (PoolInterface) {
 				worker := <-p.workerPool
 				worker <- task
 			}
+		}
+	}()
+
+	quitPeriodicChan := make(chan bool)
+	p.workersPoolQuitChan = append(p.workersPoolQuitChan, quitPeriodicChan)
+	// periodic proccess
+	go func() {
+		lastCall := time.Now()
+		for {
+			select {
+			case <-quitPeriodicChan:
+				return
+			default:
+				// check all periodic jobs
+				if len(p.periodicJob) == 0 {
+					<-time.After(time.Second)
+					continue
+				}
+				// copy periodic jobs
+				p.periodicMutex.Lock()
+				periodicJobs := append([]PeriodicJob(nil), p.periodicJob...)
+				p.periodicMutex.Unlock()
+
+				// interval for count tasks
+				maxInterval := lastCall.Add(time.Minute)
+				queue := []nextJob{}
+				JOB_LOOP:
+					for _, job := range periodicJobs {
+						next := time.Now()
+						for {
+							next = job.Next(next)
+							// drop job if job out of interval
+							if next.Sub(maxInterval) > 0 {
+								continue JOB_LOOP
+							}
+
+							// add job to queue
+							queue = append(queue, nextJob{
+								job:  job,
+								next: next,
+							})
+						}
+					}
+				// sort queue by time
+				sort.Sort(nextJobSorter(queue))
+
+				for _, job := range queue {
+					<-time.After(job.next.Sub(lastCall))
+					lastCall = time.Now()
+					job.job.run()
+				}
+			}
+
 		}
 	}()
 
@@ -181,12 +231,8 @@ func (p *pool) Stop() (PoolInterface) {
 }
 
 // create job for current pool
-func (p *pool) NewJob(taskFn interface{}, arguments ... interface{})(task Job, err error){
-	task, err = NewJob(taskFn, arguments ... )
-	if err != nil {
-		return
-
-	}
-	task.(*jobFunc).pool = p
+func (p *pool) NewJob(taskFn interface{}) (job Job) {
+	job = NewJob(taskFn)
+	job.(*jobFunc).pool = p
 	return
 }

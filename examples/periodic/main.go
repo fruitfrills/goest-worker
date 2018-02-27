@@ -11,11 +11,9 @@ import (
 Simple task with parameters and results
 You can getting results by method `Results()` task.Run().Wait().Results()
  */
-func simplePeriodicTask(a, b int) (int) {
-	fmt.Printf(`%d * %d = %d`, a, b, a*b)
-	return a*b
+func fiveSecondPassed(arg string) () {
+	fmt.Println(arg, `passed`)
 }
-
 /*
 Task without results, run on monday
  */
@@ -25,17 +23,10 @@ func everyMonday(name string) {
 
 func main()  {
 	pool := worker.MainPool.Start(runtime.NumCPU())
-	task, err := worker.NewJob(simplePeriodicTask, 2, 256)
-	if err != nil {
-		panic(err)
-	}
-	task.RunEvery(5 * time.Second)					// run every 5 second
-
-	task, err = worker.NewJob(everyMonday, "Evgenyi")
-	if err != nil {
-		panic(err)
-	}
-	task.RunEvery("@hourly")						// run monday at 12:30
-	<- time.After(30 * time.Second)
+	passTimeJob := worker.NewJob(fiveSecondPassed)
+	passTimeJob.RunEvery(5 * time.Second, "5 seconds")					// run every 5 second
+	passTimeJob.RunEvery(10 * time.Second, "10 seconds")
+	passTimeJob.RunEvery("* * * * *", "One minunte")
+	<- time.After(120 * time.Second)
 	pool.Stop()										// stop pool
 }

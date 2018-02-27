@@ -8,14 +8,18 @@ import (
 var ErrorJobDropped = errors.New("job is dropped")
 var ErrorJobPanic = errors.New("job is panic")
 
-type Job interface {
-	Run() Job
-	RunEvery(interface{}) Job
-	Wait() Job
-	Result() ([]interface{}, error)
 
-	call() Job
-	drop() Job
+type Job interface {
+	Run(args ... interface{}) JobInstance
+	RunEvery(period interface{}, args ... interface{}) PeriodicJob
+}
+
+
+type JobInstance interface {
+	Wait() JobInstance
+	Result() ([]interface{}, error)
+	call() JobInstance
+	drop() JobInstance
 }
 
 type jobFunc struct {
@@ -23,6 +27,16 @@ type jobFunc struct {
 
 	// main func
 	fn    			reflect.Value
+
+	// dispatcher
+	pool 			PoolInterface
+}
+
+type jobFuncInstance struct {
+
+	JobInstance
+	// main jon
+	job 			*jobFunc
 
 	// argument for func
 	args    		[]reflect.Value
@@ -35,40 +49,26 @@ type jobFunc struct {
 
 	// for catching panic
 	error			error
-
-	// dispatcher
-	pool 			PoolInterface
 }
 
 // create simple jobs
-func NewJob(taskFn interface{}, arguments ... interface{}) (task Job, err error) {
+func NewJob(taskFn interface{}) (Job) {
 
 	fn := reflect.ValueOf(taskFn)
 	fnType := fn.Type()
 
 	if fnType.Kind() != reflect.Func {
-		return nil, errors.New("job is not func")
-	}
-
-	if fn.Type().NumIn() != len(arguments) {
-		return nil, errors.New("invalid num arguments")
-	}
-
-	in := make([]reflect.Value, fn.Type().NumIn())
-
-	for i, arg := range arguments {
-		in[i] = reflect.ValueOf(arg)
+		panic("job is not func")
 	}
 
 	return &jobFunc{
 		fn: fn,
-		args: in,
 		pool: MainPool,
-	}, nil
+	}
 }
 
 // calling func and close channel
-func (job *jobFunc) call() Job {
+func (jobInstance *jobFuncInstance) call() JobInstance {
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
@@ -81,45 +81,52 @@ func (job *jobFunc) call() Job {
 			default:
 				err = ErrorJobPanic
 			}
-			job.error = err
+			jobInstance.error = err
 		}
-		close(job.done)
+		close(jobInstance.done)
 	}()
-	job.results = job.fn.Call(job.args)
-	return job
+	jobInstance.results = jobInstance.job.fn.Call(jobInstance.args)
+	return jobInstance
 }
 
 // open `done` channel and add task to queue of tasks
-func (job *jobFunc) Run() (Job) {
-	job.done = make(chan bool)
-	job.pool.AddTask(job)
-	return job
+func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
+	in := make([]reflect.Value, job.fn.Type().NumIn())
+	for i, arg := range arguments {
+		in[i] = reflect.ValueOf(arg)
+	}
+	instance := &jobFuncInstance{
+		job: job,
+		done: make(chan bool),
+		args: in,
+	}
+	job.pool.addJobToPool(instance)
+	return instance
 }
 
 // run task every. arg may be string (cron like), time.Duration and time.time
-func (job *jobFunc) RunEvery(arg interface{}) (Job) {
-	job.pool.addTicker(job, arg)
-	return job
+func (job *jobFunc) RunEvery(period interface{}, arguments ... interface{}) (PeriodicJob) {
+	return job.pool.addPeriodicJob(job, period, arguments ...)
 }
 
 // waiting tasks, call this after `Do`
-func (job *jobFunc) Wait() (Job) {
-	<-job.done
-	return job
+func (jobInstance *jobFuncInstance) Wait() (JobInstance) {
+	<-jobInstance.done
+	return jobInstance
 }
 
 // dropping job
-func (job *jobFunc) drop () (Job) {
-	job.error = ErrorJobDropped
-	job.done <- false
-	return job
+func (jobInstance *jobFuncInstance) drop () (JobInstance) {
+	jobInstance.error = ErrorJobDropped
+	jobInstance.done <- false
+	return jobInstance
 }
 
 // get slice of results
-func (job *jobFunc) Result() ([]interface{}, error) {
+func (jobInstance *jobFuncInstance) Result() ([]interface{}, error) {
 	var result []interface{}
-	for _, res := range job.results {
+	for _, res := range jobInstance.results {
 		result = append(result, res.Interface())
 	}
-	return result, job.error
+	return result, jobInstance.error
 }

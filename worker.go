@@ -6,14 +6,14 @@ type WorkerInterface interface {
 }
 
 type worker struct {
-	task     		chan Job
+	task     		chan JobInstance
 	quitChan 		chan bool
 	workerPool		workerPoolType
 }
 
 func NewWorker(workerPool workerPoolType) (WorkerInterface) {
 	return &worker{
-		task:     make(chan Job),
+		task:     make(chan JobInstance),
 		quitChan: make(chan bool),
 		workerPool: workerPool,
 	}
