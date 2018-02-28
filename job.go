@@ -7,11 +7,12 @@ import (
 
 var ErrorJobDropped = errors.New("job is dropped")
 var ErrorJobPanic = errors.New("job is panic")
-
+var ErrorJobBind = errors.New("first argument is not job instance")
 
 type Job interface {
 	Run(args ... interface{}) JobInstance
 	RunEvery(period interface{}, args ... interface{}) PeriodicJob
+	Bind(bool) Job
 }
 
 
@@ -22,6 +23,10 @@ type JobInstance interface {
 	drop() JobInstance
 }
 
+type JobInjection interface {
+	Retry() JobInstance
+}
+
 type jobFunc struct {
 	Job
 
@@ -30,11 +35,13 @@ type jobFunc struct {
 
 	// dispatcher
 	pool 			PoolInterface
+
+	bind			bool
 }
 
 type jobFuncInstance struct {
-
 	JobInstance
+	JobInjection
 	// main jon
 	job 			*jobFunc
 
@@ -91,17 +98,30 @@ func (jobInstance *jobFuncInstance) call() JobInstance {
 
 // open `done` channel and add task to queue of tasks
 func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
-	in := make([]reflect.Value, job.fn.Type().NumIn())
+	in := make([]reflect.Value,  job.fn.Type().NumIn())
 	for i, arg := range arguments {
 		in[i] = reflect.ValueOf(arg)
 	}
 	instance := &jobFuncInstance{
 		job: job,
 		done: make(chan bool),
-		args: in,
 	}
+	// if job.bind == true, set jobinstance as first argument
+	if job.bind {
+		in = append([]reflect.Value{reflect.ValueOf(instance)}, in[0:len(in)-1]...)
+	}
+	instance.args = in
 	job.pool.addJobToPool(instance)
 	return instance
+}
+
+// set bind
+func (job *jobFunc) Bind(bind bool) (Job) {
+	if job.fn.Type().In(0).Name() != "JobInjection" {
+		panic(ErrorJobBind)
+	}
+	job.bind = bind
+	return job
 }
 
 // run task every. arg may be string (cron like), time.Duration and time.time
@@ -129,4 +149,15 @@ func (jobInstance *jobFuncInstance) Result() ([]interface{}, error) {
 		result = append(result, res.Interface())
 	}
 	return result, jobInstance.error
+}
+
+func (jobInstance *jobFuncInstance) Retry() (JobInstance) {
+	var in []interface{}
+	for _, arg := range jobInstance.args{
+		in = append(in, arg.Interface())
+	}
+	if jobInstance.job.bind{
+		in = append([]interface{}{}, in[1:] ...)
+	}
+	return jobInstance.job.Run(in ...)
 }

@@ -10,15 +10,17 @@ import (
 Simple task with parameters and results
 You can getting results by method `Results()` task.Run().Wait().Results()
  */
-func sum(a, b int) (int) {
+func sum(job worker.JobInjection, a, b int) (int) {
+	res := a + b
 	fmt.Printf("%d + %d\n", a, b)
-	return a+b
+	job.Retry() //
+	return res
 }
 
 func main()  {
 	pool := worker.New().Start(runtime.NumCPU())  	// create workers pool
 	sumJob := pool.NewJob(sum)
-	results, err := sumJob.Run(2, 256).Wait().Result()
+	results, err := sumJob.Bind(true).Run(2, 256).Wait().Result()
 	if err != nil {
 		panic(err)
 	}
