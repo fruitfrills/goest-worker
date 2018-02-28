@@ -13,18 +13,22 @@ type Job interface {
 	Run(args ... interface{}) JobInstance
 	RunEvery(period interface{}, args ... interface{}) PeriodicJob
 	Bind(bool) Job
+	SetMaxRetry(int) Job
 }
 
 
 type JobInstance interface {
 	Wait() JobInstance
 	Result() ([]interface{}, error)
+
+	getWaitChan() (chan JobInstance)
 	call() JobInstance
 	drop() JobInstance
 }
 
 type JobInjection interface {
 	Retry() JobInstance
+	WaitingFor(JobInstance) (JobInstance)
 }
 
 type jobFunc struct {
@@ -36,7 +40,10 @@ type jobFunc struct {
 	// dispatcher
 	pool 			PoolInterface
 
+	// self instance as first argument
 	bind			bool
+
+	maxRetry		int
 }
 
 type jobFuncInstance struct {
@@ -54,8 +61,14 @@ type jobFuncInstance struct {
 	// done channel for waiting
 	done    		chan bool
 
+	// waiting channel
+	wait			chan JobInstance
+
 	// for catching panic
 	error			error
+
+	// retry
+	retry 			int
 }
 
 // create simple jobs
@@ -71,7 +84,16 @@ func NewJob(taskFn interface{}) (Job) {
 	return &jobFunc{
 		fn: fn,
 		pool: MainPool,
+		maxRetry: -1,
 	}
+}
+
+func (job *jobFunc) SetMaxRetry (i int) (Job) {
+	if (i < -1) {
+		panic(`invalid count of retry`)
+	}
+	job.maxRetry = i
+	return job
 }
 
 // calling func and close channel
@@ -91,6 +113,7 @@ func (jobInstance *jobFuncInstance) call() JobInstance {
 			jobInstance.error = err
 		}
 		close(jobInstance.done)
+		close(jobInstance.wait)
 	}()
 	jobInstance.results = jobInstance.job.fn.Call(jobInstance.args)
 	return jobInstance
@@ -105,6 +128,8 @@ func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
 	instance := &jobFuncInstance{
 		job: job,
 		done: make(chan bool),
+		wait: make(chan JobInstance),
+		retry: job.maxRetry,
 	}
 	// if job.bind == true, set jobinstance as first argument
 	if job.bind {
@@ -152,6 +177,12 @@ func (jobInstance *jobFuncInstance) Result() ([]interface{}, error) {
 }
 
 func (jobInstance *jobFuncInstance) Retry() (JobInstance) {
+	if jobInstance.retry == 0 {
+		panic(`max retry`)
+	}
+	if jobInstance.retry != -1 {
+		jobInstance.retry -=1
+	}
 	var in []interface{}
 	for _, arg := range jobInstance.args{
 		in = append(in, arg.Interface())
@@ -160,4 +191,18 @@ func (jobInstance *jobFuncInstance) Retry() (JobInstance) {
 		in = append([]interface{}{}, in[1:] ...)
 	}
 	return jobInstance.job.Run(in ...)
+}
+
+/**
+ TODO: this method must be report to worker about state waiting for avoid dedlock
+
+ */
+func (jobInstance *jobFuncInstance) WaitingFor(job JobInstance) (JobInstance) {
+	jobInstance.wait <- job
+	job.Wait()
+	return job
+}
+
+func (jobInstance *jobFuncInstance) getWaitChan() (chan JobInstance) {
+	return jobInstance.wait
 }

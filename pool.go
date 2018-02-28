@@ -18,7 +18,7 @@ const (
 )
 
 // channel of channel for balancing tasks between workers
-type workerPoolType chan chan JobInstance
+type workerPoolType chan WorkerInterface
 
 type PoolInterface interface {
 	Start(count int) (PoolInterface)
@@ -34,7 +34,7 @@ type pool struct {
 	PoolInterface
 
 	// can getting free worker from this chan
-	workerPool chan chan JobInstance
+	workerPool chan WorkerInterface
 
 	// pool's state
 	state int32
@@ -136,14 +136,15 @@ func (p *pool) Start(count int) (PoolInterface) {
 	go func() {
 		for {
 			select {
-			case task := <-p.jobQueue:
+			case job := <-p.jobQueue:
 				// if close channel
-				if task == nil {
+				if job == nil {
 					return
 				}
-				// get worker and send task
-				worker := <-p.workerPool
-				worker <- task
+				var worker WorkerInterface
+				// get free worker and send task
+				worker = <-p.workerPool
+				worker.addJob(job)
 			}
 		}
 	}()
