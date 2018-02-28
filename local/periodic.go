@@ -1,18 +1,15 @@
-package goest_worker
+package local
 
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
+	goestworker "goest-worker"
+
 )
 
-type PeriodicJob interface {
-	Next(time.Time) time.Time
-	run() (JobInstance)
-}
-
 type cronPeriodicJob struct {
-	PeriodicJob
-	job 		Job
+	goestworker.PeriodicJob
+	job 		goestworker.Job
 	expr 		*cronexpr.Expression
 	args		[]interface{}
 }
@@ -21,13 +18,13 @@ func (pJob *cronPeriodicJob) Next(current time.Time) (time.Time){
 	return pJob.expr.Next(current)
 }
 
-func (pJob *cronPeriodicJob) run () (JobInstance) {
+func (pJob *cronPeriodicJob) Run () (goestworker.JobInstance) {
 	return pJob.job.Run(pJob.args ...)
 }
 
 type timeDurationPeriodicJob struct{
-	PeriodicJob
-	job 		Job
+	goestworker.PeriodicJob
+	job 		goestworker.Job
 	last		time.Time
 	duration 	time.Duration
 	args		[]interface{}
@@ -40,16 +37,16 @@ func (pJob *timeDurationPeriodicJob) Next(current time.Time) (time.Time) {
 	return current.Add(pJob.duration)
 }
 
-func (pJob *timeDurationPeriodicJob) run () (JobInstance) {
+func (pJob *timeDurationPeriodicJob) Run () (goestworker.JobInstance) {
 	pJob.last = time.Now()
 	return pJob.job.Run(pJob.args ...)
 }
 
 type nextJob struct {
-	job		PeriodicJob
+	job		goestworker.PeriodicJob
 	next	time.Time
 }
-
+// for soi
 type nextJobSorter []nextJob
 
 func (n nextJobSorter) Len () int {

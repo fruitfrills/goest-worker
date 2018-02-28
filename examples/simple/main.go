@@ -1,18 +1,18 @@
 package main
 
 import (
-	worker "goest-worker" // "github.com/yobayob/goest-worker"
+	worker "goest-worker/local"
 	"runtime"
 	"fmt"
+	"goest-worker"
 )
 /*
 Simple task with parameters and results
 You can getting results by method `Results()` task.Run().Wait().Results()
  */
-func sum(job worker.JobInjection, a, b int) (int) {
+func sum(job goest_worker.JobInjection, a, b int) (int) {
 	res := a+b
 	fmt.Printf("%d + %d = %d\n", a, b, res)
-	job.Retry() //
 	return res
 }
 

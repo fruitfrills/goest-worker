@@ -1,7 +1,7 @@
 package main
 
 import (
-	worker "goest-worker" // "github.com/yobayob/goest-worker"
+	worker "goest-worker/local" // "github.com/yobayob/goest-worker"
 	"runtime"
 	"time"
 	"fmt"
@@ -13,12 +13,6 @@ You can getting results by method `Results()` task.Run().Wait().Results()
  */
 func fiveSecondPassed(arg string) () {
 	fmt.Println(arg, `passed`)
-}
-/*
-Task without results, run on monday
- */
-func everyMonday(name string) {
-	fmt.Printf(`Hello, %s`, name)
 }
 
 func main()  {
