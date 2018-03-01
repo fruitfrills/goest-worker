@@ -36,16 +36,12 @@ type pool struct {
 
 	// periodic jobs
 	periodicJob []goestworker.PeriodicJob
-
-	// periodic mutex
-	periodicMutex *sync.RWMutex
 }
 
 // create pool of workers
 func New() (goestworker.PoolInterface) {
 	return &pool{
 		stateMutex:    &sync.Mutex{},
-		periodicMutex: &sync.RWMutex{},
 		state:         goestworker.POOL_STOPPED,
 	}
 }
@@ -65,8 +61,6 @@ func (p *pool) AddJobToPool(task goestworker.JobInstance) {
 }
 
 func (p *pool) AddPeriodicJob(job goestworker.Job, period interface{}, arguments ... interface{}) (goestworker.PeriodicJob) {
-	p.periodicMutex.Lock()
-	defer p.periodicMutex.Unlock()
 	var pJob goestworker.PeriodicJob
 	switch period.(type) {
 	case time.Duration:
@@ -135,25 +129,28 @@ func (p *pool) Start(count int) (goestworker.PoolInterface) {
 		}
 	}()
 
-	quitPeriodicChan := make(chan bool)
-	p.workersPoolQuitChan = append(p.workersPoolQuitChan, quitPeriodicChan)
+
 	// periodic proccess
-	go func() {
+
+	scheduler := func() {
+		quitPeriodicChan := make(chan bool)
+		p.workersPoolQuitChan = append(p.workersPoolQuitChan, quitPeriodicChan)
 		lastCall := time.Now()
+		periodicJobs := append([]goestworker.PeriodicJob(nil), p.periodicJob...)
 		for {
 			select {
 			case <-quitPeriodicChan:
 				return
 			default:
-				// check all periodic jobs
-				if len(p.periodicJob) == 0 {
-					<-time.After(time.Second)
-					continue
-				}
-				// copy periodic jobs
-				p.periodicMutex.Lock()
-				periodicJobs := append([]goestworker.PeriodicJob(nil), p.periodicJob...)
-				p.periodicMutex.Unlock()
+				//// check all periodic jobs
+				//if len(p.periodicJob) == 0 {
+				//	<-time.After(time.Second)
+				//	continue
+				//}
+				//// copy periodic jobs
+				//p.periodicMutex.Lock()
+				//periodicJobs := append([]goestworker.PeriodicJob(nil), p.periodicJob...)
+				//p.periodicMutex.Unlock()
 
 				// interval for count tasks
 				maxInterval := lastCall.Add(time.Minute)
@@ -191,7 +188,11 @@ func (p *pool) Start(count int) (goestworker.PoolInterface) {
 			}
 
 		}
-	}()
+	}
+
+	if  len(p.periodicJob) != 0 {
+		go scheduler()
+	}
 
 	// set state to started
 	p.setState(goestworker.POOL_STARTED)
