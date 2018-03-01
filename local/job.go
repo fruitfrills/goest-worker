@@ -3,7 +3,7 @@ package local
 import (
 	"reflect"
 	"errors"
-	goestworker "goest-worker"
+	goestworker "goest-worker/common"
 )
 
 type jobFunc struct {
@@ -46,21 +46,9 @@ type jobFuncInstance struct {
 	retry 			int
 }
 
-// create simple jobs
-func NewJob(taskFn interface{}) (goestworker.Job) {
-
-	fn := reflect.ValueOf(taskFn)
-	fnType := fn.Type()
-
-	if fnType.Kind() != reflect.Func {
-		panic("job is not func")
-	}
-
-	return &jobFunc{
-		fn: fn,
-		pool: MainPool,
-		maxRetry: -1,
-	}
+func (job *jobFunc) SetPool (p goestworker.PoolInterface) (goestworker.Job) {
+	job.pool = p
+	return job
 }
 
 func (job *jobFunc) SetMaxRetry (i int) (goestworker.Job) {

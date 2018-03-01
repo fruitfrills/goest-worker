@@ -1,7 +1,7 @@
 package local
 
 import (
-	goestworker "goest-worker"
+	goestworker "goest-worker/common"
 )
 
 type worker struct {

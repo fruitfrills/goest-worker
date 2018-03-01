@@ -1,7 +1,7 @@
 package main
 
 import (
-	worker "goest-worker/local" // "github.com/yobayob/goest-worker"
+	worker "goest-worker" // "github.com/yobayob/goest-worker"
 	"time"
 	"fmt"
 )
@@ -21,13 +21,13 @@ func pass(arg string) () {
 }
 
 func main()  {
-	pool := worker.MainPool
-	passTimeJob := worker.NewJob(pass)
+	pool := worker.New()
+	passTimeJob := pool.NewJob(pass)
 	passTimeJob.RunEvery(5 * time.Second, "5 seconds")					// run every 5 second
 	passTimeJob.RunEvery(10 * time.Second, "10 seconds")
 	passTimeJob.RunEvery("* * * * *", "One minunte")
 
-	worker.NewJob(failFunc).RunEvery(3 * time.Second)
+	pool.NewJob(failFunc).RunEvery(3 * time.Second)
 
 	pool.Start(5)
 	<- time.After(120 * time.Second)

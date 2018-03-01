@@ -3,7 +3,7 @@ package local
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
-	goestworker "goest-worker"
+	goestworker "goest-worker/common"
 
 	"sync"
 	"sync/atomic"

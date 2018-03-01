@@ -1,4 +1,4 @@
-package goest_worker
+package common
 
 import "errors"
 
