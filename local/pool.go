@@ -158,7 +158,7 @@ func (p *pool) Start(count int) (goestworker.PoolInterface) {
 				// interval for count tasks
 				maxInterval := lastCall.Add(time.Minute)
 				queue := []nextJob{}
-			JOB_LOOP:
+				JOB_LOOP:
 				for _, job := range periodicJobs {
 					next := time.Now()
 					for {
@@ -178,11 +178,11 @@ func (p *pool) Start(count int) (goestworker.PoolInterface) {
 				// sort queue by time
 				sort.Sort(nextJobSorter(queue))
 
-				for _, job := range queue {
+				for _, pJob := range queue {
 					select {
-					case <-time.After(job.next.Sub(lastCall)):
+					case <-time.After(pJob.next.Sub(lastCall)):
 						lastCall = time.Now()
-						job.job.Run()
+						pJob.job.Run()
 					case <- quitPeriodicChan:
 						return
 					}

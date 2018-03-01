@@ -43,5 +43,5 @@ type JobInjection interface {
 
 type PeriodicJob interface {
 	Next(time.Time) time.Time
-	Run() (JobInstance)
+	Run() ()
 }
