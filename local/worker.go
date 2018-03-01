@@ -1,18 +1,18 @@
 package local
 
 import (
-	goestworker "goest-worker/common"
+	"goest-worker/common"
 )
 
 type worker struct {
-	task     		chan goestworker.JobInstance
+	task     		chan common.JobInstance
 	quitChan 		chan bool
 	workerPool		workerPoolType
 }
 
-func NewWorker(workerPool workerPoolType) (goestworker.WorkerInterface) {
+func NewWorker(workerPool workerPoolType) (common.WorkerInterface) {
 	return &worker{
-		task:     make(chan goestworker.JobInstance),
+		task:     make(chan common.JobInstance),
 		quitChan: make(chan bool),
 		workerPool: workerPool,
 	}
@@ -23,7 +23,7 @@ func (w *worker) GetQuitChan() (chan bool) {
 }
 
 
-func (w *worker) AddJob(job goestworker.JobInstance) () {
+func (w *worker) AddJob(job common.JobInstance) () {
 	w.task <- job
 	return
 }

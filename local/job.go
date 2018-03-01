@@ -3,17 +3,17 @@ package local
 import (
 	"reflect"
 	"errors"
-	goestworker "goest-worker/common"
+	"goest-worker/common"
 )
 
 type jobFunc struct {
-	goestworker.Job
+	common.Job
 
 	// main func
 	fn    			reflect.Value
 
 	// dispatcher
-	pool 			goestworker.PoolInterface
+	pool 			common.PoolInterface
 
 	// self instance as first argument
 	bind			bool
@@ -22,8 +22,8 @@ type jobFunc struct {
 }
 
 type jobFuncInstance struct {
-	goestworker.JobInstance
-	goestworker.JobInjection
+	common.JobInstance
+	common.JobInjection
 	// main jon
 	job 			*jobFunc
 
@@ -37,7 +37,7 @@ type jobFuncInstance struct {
 	done    		chan bool
 
 	// waiting channel
-	wait			chan goestworker.JobInstance
+	wait			chan common.JobInstance
 
 	// for catching panic
 	error			error
@@ -46,12 +46,12 @@ type jobFuncInstance struct {
 	retry 			int
 }
 
-func (job *jobFunc) SetPool (p goestworker.PoolInterface) (goestworker.Job) {
+func (job *jobFunc) SetPool (p common.PoolInterface) (common.Job) {
 	job.pool = p
 	return job
 }
 
-func (job *jobFunc) SetMaxRetry (i int) (goestworker.Job) {
+func (job *jobFunc) SetMaxRetry (i int) (common.Job) {
 	if (i < -1) {
 		panic(`invalid count of retry`)
 	}
@@ -60,7 +60,7 @@ func (job *jobFunc) SetMaxRetry (i int) (goestworker.Job) {
 }
 
 // calling func and close channel
-func (jobInstance *jobFuncInstance) Call() goestworker.JobInstance {
+func (jobInstance *jobFuncInstance) Call() common.JobInstance {
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
@@ -71,7 +71,7 @@ func (jobInstance *jobFuncInstance) Call() goestworker.JobInstance {
 			case error:
 				err = e
 			default:
-				err = goestworker.ErrorJobPanic
+				err = common.ErrorJobPanic
 			}
 			jobInstance.error = err
 		}
@@ -83,7 +83,7 @@ func (jobInstance *jobFuncInstance) Call() goestworker.JobInstance {
 }
 
 // open `done` channel and add task to queue of tasks
-func (job *jobFunc) Run(arguments ... interface{}) (goestworker.JobInstance) {
+func (job *jobFunc) Run(arguments ... interface{}) (common.JobInstance) {
 	in := make([]reflect.Value,  job.fn.Type().NumIn())
 	for i, arg := range arguments {
 		in[i] = reflect.ValueOf(arg)
@@ -91,7 +91,7 @@ func (job *jobFunc) Run(arguments ... interface{}) (goestworker.JobInstance) {
 	instance := &jobFuncInstance{
 		job: job,
 		done: make(chan bool),
-		wait: make(chan goestworker.JobInstance),
+		wait: make(chan common.JobInstance),
 		retry: job.maxRetry,
 	}
 	// if job.bind == true, set jobinstance as first argument
@@ -104,28 +104,28 @@ func (job *jobFunc) Run(arguments ... interface{}) (goestworker.JobInstance) {
 }
 
 // set bind
-func (job *jobFunc) Bind(bind bool) (goestworker.Job) {
+func (job *jobFunc) Bind(bind bool) (common.Job) {
 	if job.fn.Type().In(0).Name() != "JobInjection" {
-		panic(goestworker.ErrorJobBind)
+		panic(common.ErrorJobBind)
 	}
 	job.bind = bind
 	return job
 }
 
 // run task every. arg may be string (cron like), time.Duration and time.time
-func (job *jobFunc) RunEvery(period interface{}, arguments ... interface{}) (goestworker.PeriodicJob) {
+func (job *jobFunc) RunEvery(period interface{}, arguments ... interface{}) (common.PeriodicJob) {
 	return job.pool.AddPeriodicJob(job, period, arguments ...)
 }
 
 // waiting tasks, call this after `Do`
-func (jobInstance *jobFuncInstance) Wait() (goestworker.JobInstance) {
+func (jobInstance *jobFuncInstance) Wait() (common.JobInstance) {
 	<-jobInstance.done
 	return jobInstance
 }
 
 // dropping job
-func (jobInstance *jobFuncInstance) Drop () (goestworker.JobInstance) {
-	jobInstance.error = goestworker.ErrorJobDropped
+func (jobInstance *jobFuncInstance) Drop () (common.JobInstance) {
+	jobInstance.error = common.ErrorJobDropped
 	jobInstance.done <- false
 	return jobInstance
 }
@@ -139,7 +139,7 @@ func (jobInstance *jobFuncInstance) Result() ([]interface{}, error) {
 	return result, jobInstance.error
 }
 
-func (jobInstance *jobFuncInstance) Retry() (goestworker.JobInstance) {
+func (jobInstance *jobFuncInstance) Retry() (common.JobInstance) {
 	if jobInstance.retry == 0 {
 		panic(`max retry`)
 	}

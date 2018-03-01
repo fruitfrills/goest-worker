@@ -4,34 +4,34 @@ import (
 	"time"
 	"github.com/gorhill/cronexpr"
 	"sort"
-	goestworker "goest-worker/common"
+	"goest-worker/common"
 	"reflect"
 )
 
 
 // channel of channel for balancing tasks between workers
-type workerPoolType chan goestworker.WorkerInterface
+type workerPoolType chan common.WorkerInterface
 
 // local backend
 type LocalBackend struct {
-	goestworker.PoolBackendInterface
+	common.PoolBackendInterface
 
 	// can getting free worker from this chan
-	workerPool chan goestworker.WorkerInterface
+	workerPool chan common.WorkerInterface
 
 	// put job
-	jobQueue chan goestworker.JobInstance
+	jobQueue chan common.JobInstance
 
 	// slice of quit channel for soft finish
 	workersPoolQuitChan []chan bool
 
 	// periodic jobs
-	periodicJob []goestworker.PeriodicJob
+	periodicJob []common.PeriodicJob
 
 }
 
 // put job to queue
-func (backend *LocalBackend) AddJobToPool(p goestworker.PoolInterface, task goestworker.JobInstance) () {
+func (backend *LocalBackend) AddJobToPool(p common.PoolInterface, task common.JobInstance) () {
 	p.Lock()
 	defer p.Unlock()
 
@@ -44,8 +44,8 @@ func (backend *LocalBackend) AddJobToPool(p goestworker.PoolInterface, task goes
 	backend.jobQueue <- task
 }
 
-func (backend *LocalBackend) AddPeriodicJob(p goestworker.PoolInterface, job goestworker.Job, period interface{}, arguments ... interface{}) (goestworker.PeriodicJob) {
-	var pJob goestworker.PeriodicJob
+func (backend *LocalBackend) AddPeriodicJob(p common.PoolInterface, job common.Job, period interface{}, arguments ... interface{}) (common.PeriodicJob) {
+	var pJob common.PeriodicJob
 	switch period.(type) {
 	case time.Duration:
 		pJob = &timeDurationPeriodicJob{
@@ -68,7 +68,7 @@ func (backend *LocalBackend) AddPeriodicJob(p goestworker.PoolInterface, job goe
 	return pJob
 }
 
-func (backend *LocalBackend) Processor(goestworker.PoolInterface) {
+func (backend *LocalBackend) Processor(common.PoolInterface) {
 	for {
 		select {
 		case job := <-backend.jobQueue:
@@ -76,7 +76,7 @@ func (backend *LocalBackend) Processor(goestworker.PoolInterface) {
 			if job == nil {
 				return
 			}
-			var worker goestworker.WorkerInterface
+			var worker common.WorkerInterface
 			// get free worker and send task
 			worker = <-backend.workerPool
 			worker.AddJob(job)
@@ -84,11 +84,11 @@ func (backend *LocalBackend) Processor(goestworker.PoolInterface) {
 	}
 }
 
-func (backend *LocalBackend) Scheduler (p goestworker.PoolInterface) {
+func (backend *LocalBackend) Scheduler (p common.PoolInterface) {
 	quitPeriodicChan := make(chan bool)
 	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitPeriodicChan)
 	lastCall := time.Now()
-	periodicJobs := append([]goestworker.PeriodicJob(nil), backend.periodicJob...)
+	periodicJobs := append([]common.PeriodicJob(nil), backend.periodicJob...)
 	for {
 		select {
 		case <-quitPeriodicChan:
@@ -131,14 +131,14 @@ func (backend *LocalBackend) Scheduler (p goestworker.PoolInterface) {
 	}
 }
 
-func (backend *LocalBackend) Start(p goestworker.PoolInterface, count int) (goestworker.PoolInterface) {
+func (backend *LocalBackend) Start(p common.PoolInterface, count int) (common.PoolInterface) {
 
 	// if dispatcher started - do nothing
 	if !p.IsStopped() {
 		return p
 	}
 
-	backend.jobQueue = make(chan goestworker.JobInstance)
+	backend.jobQueue = make(chan common.JobInstance)
 	backend.workerPool = make(workerPoolType, count)
 	for i := 0; i < count; i++ {
 		worker := NewWorker(backend.workerPool)
@@ -159,7 +159,7 @@ func (backend *LocalBackend) Start(p goestworker.PoolInterface, count int) (goes
 	return p
 }
 
-func (backend *LocalBackend) Stop(p goestworker.PoolInterface) (goestworker.PoolInterface) {
+func (backend *LocalBackend) Stop(p common.PoolInterface) (common.PoolInterface) {
 
 	// if dispatcher stopped - do nothing
 	if p.IsStopped() {
@@ -178,7 +178,7 @@ func (backend *LocalBackend) Stop(p goestworker.PoolInterface) (goestworker.Pool
 }
 
 // create simple jobs
-func (backend *LocalBackend) NewJob(p goestworker.PoolInterface, taskFn interface{}) (goestworker.Job) {
+func (backend *LocalBackend) NewJob(p common.PoolInterface, taskFn interface{}) (common.Job) {
 
 	fn := reflect.ValueOf(taskFn)
 	fnType := fn.Type()

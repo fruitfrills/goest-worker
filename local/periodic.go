@@ -3,7 +3,7 @@ package local
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
-	goestworker "goest-worker/common"
+	"goest-worker/common"
 
 	"sync"
 	"sync/atomic"
@@ -15,11 +15,11 @@ const (
 )
 
 type cronPeriodicJob struct {
-	goestworker.PeriodicJob
+	common.PeriodicJob
 
 	sync.Mutex
 	state		int32
-	job 		goestworker.Job
+	job 		common.Job
 	expr 		*cronexpr.Expression
 	args		[]interface{}
 }
@@ -55,11 +55,11 @@ func (pJob *cronPeriodicJob) isBusy() bool {
 }
 
 type timeDurationPeriodicJob struct{
-	goestworker.PeriodicJob
+	common.PeriodicJob
 
 	sync.Mutex
 	state		int32
-	job 		goestworker.Job
+	job 		common.Job
 	last		time.Time
 	duration 	time.Duration
 	args		[]interface{}
@@ -108,7 +108,7 @@ func (pJob *timeDurationPeriodicJob) isBusy() bool {
 
 // struct for sorting jobs by next
 type nextJob struct {
-	job		goestworker.PeriodicJob
+	job		common.PeriodicJob
 	next	time.Time
 }
 // for sort job by next
