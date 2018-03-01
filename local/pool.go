@@ -179,9 +179,14 @@ func (p *pool) Start(count int) (goestworker.PoolInterface) {
 				sort.Sort(nextJobSorter(queue))
 
 				for _, job := range queue {
-					<-time.After(job.next.Sub(lastCall))
-					lastCall = time.Now()
-					job.job.Run()
+					select {
+					case <-time.After(job.next.Sub(lastCall)):
+						lastCall = time.Now()
+						job.job.Run()
+					case <- quitPeriodicChan:
+						return
+					}
+
 				}
 			}
 
