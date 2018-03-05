@@ -1,10 +1,8 @@
-package local
+package common
 
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
-	"goest-worker/common"
-
 	"sync"
 	"sync/atomic"
 )
@@ -15,23 +13,23 @@ const (
 )
 
 type cronPeriodicJob struct {
-	common.PeriodicJob
+	PeriodicJob
 
 	sync.Mutex
-	state		int32
-	job 		common.Job
-	expr 		*cronexpr.Expression
-	args		[]interface{}
+	state int32
+	job   Job
+	expr  *cronexpr.Expression
+	args  []interface{}
 }
 
-func (pJob *cronPeriodicJob) Next(current time.Time) (time.Time){
+func (pJob *cronPeriodicJob) Next(current time.Time) (time.Time) {
 	return pJob.expr.Next(current)
 }
 
-func (pJob *cronPeriodicJob) Run () () {
+func (pJob *cronPeriodicJob) Run() () {
 	pJob.Lock()
 	defer pJob.Unlock()
-	if pJob.isBusy(){
+	if pJob.isBusy() {
 		// log.Warning
 		return
 	}
@@ -47,22 +45,46 @@ func (pJob *cronPeriodicJob) Run () () {
 }
 
 func (pJob *cronPeriodicJob) setState(state int32) {
-	atomic.StoreInt32( &(pJob.state), state)
+	atomic.StoreInt32(&(pJob.state), state)
 }
 
 func (pJob *cronPeriodicJob) isBusy() bool {
 	return atomic.LoadInt32(&(pJob.state)) == job_busy
 }
 
-type timeDurationPeriodicJob struct{
-	common.PeriodicJob
+
+/**
+pJob =
+	case string:
+		pJob =
+ */
+
+func NewTimeDurationJob(job Job, duration time.Duration, arguments ... interface{}) (PeriodicJob) {
+	return  &timeDurationPeriodicJob{
+		job:      job,
+		duration: duration,
+		last:     time.Now(),
+		args: 	  arguments,
+	}
+}
+
+func NewCronJob (job Job, expr string, arguments ... interface{}) (PeriodicJob) {
+	return &cronPeriodicJob{
+		job:  job,
+		expr: cronexpr.MustParse(expr),
+		args: arguments,
+	}
+}
+
+type timeDurationPeriodicJob struct {
+	PeriodicJob
 
 	sync.Mutex
-	state		int32
-	job 		common.Job
-	last		time.Time
-	duration 	time.Duration
-	args		[]interface{}
+	state    int32
+	job      Job
+	last     time.Time
+	duration time.Duration
+	args     []interface{}
 }
 
 // time of next run
@@ -73,12 +95,12 @@ func (pJob *timeDurationPeriodicJob) Next(current time.Time) (time.Time) {
 	return current.Add(pJob.duration)
 }
 
-func (pJob *timeDurationPeriodicJob) Run () () {
+func (pJob *timeDurationPeriodicJob) Run() () {
 	pJob.Lock()
 	defer pJob.Unlock()
 
 	// run once instance
-	if pJob.isBusy(){
+	if pJob.isBusy() {
 		// log.Warning
 		return
 	}
@@ -98,7 +120,7 @@ func (pJob *timeDurationPeriodicJob) Run () () {
 
 // set state to periodic job
 func (pJob *timeDurationPeriodicJob) setState(state int32) {
-	atomic.StoreInt32( &(pJob.state), state)
+	atomic.StoreInt32(&(pJob.state), state)
 }
 
 // check busy job
@@ -107,21 +129,22 @@ func (pJob *timeDurationPeriodicJob) isBusy() bool {
 }
 
 // struct for sorting jobs by next
-type nextJob struct {
-	job		common.PeriodicJob
-	next	time.Time
+type NextJob struct {
+	Job PeriodicJob
+	Next time.Time
 }
-// for sort job by next
-type nextJobSorter []nextJob
 
-func (n nextJobSorter) Len () int {
+// for sort job by next
+type NextJobSorter []NextJob
+
+func (n NextJobSorter) Len() int {
 	return len(n)
 }
 
-func (n nextJobSorter) Swap(i, j int) {
+func (n NextJobSorter) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
-func (n nextJobSorter) Less(i, j int) bool {
-	return n[i].next.Sub(n[j].next) < 0
+func (n NextJobSorter) Less(i, j int) bool {
+	return n[i].Next.Sub(n[j].Next) < 0
 }

@@ -36,8 +36,6 @@ type jobFuncInstance struct {
 	// done channel for waiting
 	done    		chan bool
 
-	// waiting channel
-	wait			chan common.JobInstance
 
 	// for catching panic
 	error			error
@@ -54,28 +52,6 @@ func (job *jobFunc) SetMaxRetry (i int) (common.Job) {
 	return job
 }
 
-// calling func and close channel
-func (jobInstance *jobFuncInstance) Call() common.JobInstance {
-	defer func() {
-		// error handling
-		if r := recover(); r != nil {
-			var err error
-			switch e := r.(type) {
-			case string:
-				err = errors.New(e)
-			case error:
-				err = e
-			default:
-				err = common.ErrorJobPanic
-			}
-			jobInstance.error = err
-		}
-		close(jobInstance.done)
-		close(jobInstance.wait)
-	}()
-	jobInstance.results = jobInstance.job.fn.Call(jobInstance.args)
-	return jobInstance
-}
 
 // open `done` channel and add task to queue of tasks
 func (job *jobFunc) Run(arguments ... interface{}) (common.JobInstance) {
@@ -86,7 +62,6 @@ func (job *jobFunc) Run(arguments ... interface{}) (common.JobInstance) {
 	instance := &jobFuncInstance{
 		job: job,
 		done: make(chan bool),
-		wait: make(chan common.JobInstance),
 		retry: job.maxRetry,
 	}
 	// if job.bind == true, set jobinstance as first argument
@@ -110,6 +85,28 @@ func (job *jobFunc) Bind(bind bool) (common.Job) {
 // run task every. arg may be string (cron like), time.Duration and time.time
 func (job *jobFunc) RunEvery(period interface{}, arguments ... interface{}) (common.PeriodicJob) {
 	return job.pool.AddPeriodicJob(job, period, arguments ...)
+}
+
+// calling func and close channel
+func (jobInstance *jobFuncInstance) Call() common.JobInstance {
+	defer func() {
+		// error handling
+		if r := recover(); r != nil {
+			var err error
+			switch e := r.(type) {
+			case string:
+				err = errors.New(e)
+			case error:
+				err = e
+			default:
+				err = common.ErrorJobPanic
+			}
+			jobInstance.error = err
+		}
+		close(jobInstance.done)
+	}()
+	jobInstance.results = jobInstance.job.fn.Call(jobInstance.args)
+	return jobInstance
 }
 
 // waiting tasks, call this after `Do`

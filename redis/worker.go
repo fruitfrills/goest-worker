@@ -2,7 +2,6 @@ package redis
 
 import (
 	"goest-worker/common"
-	"fmt"
 )
 
 
@@ -44,7 +43,6 @@ func (w *worker) Start() {
 				if work == nil {
 					return
 				}
-				fmt.Println(`call`)
 				work.Call()
 			case <-w.quitChan:
 				return

@@ -69,19 +69,19 @@ func (p *pool) setState(state int32) () {
 // close all channels, stopping workers and periodic tasks
 // if the dispatcher is restarted, all tasks will be stoppep. You need starts tasks again ...
 func (p *pool) Stop() (common.PoolInterface) {
-	p.Mutex.Lock()
+	p.Lock()
 	defer func() {
 		p.setState(POOL_STOPPED)
-		p.Mutex.Unlock()
+		p.Unlock()
 	}()
 	return p.backend.Stop(p)
 }
 
 func (p *pool) Start(count int) (common.PoolInterface) {
-	p.Mutex.Lock()
+	p.Lock()
 	defer func() {
 		p.setState(POOL_STARTED)
-		p.Mutex.Unlock()
+		p.Unlock()
 	}()
 	return p.backend.Start(p, count)
 }
@@ -103,7 +103,7 @@ func (p *pool) NewJob(taskFn interface{}) (job common.Job) {
 
 // register job for current pool
 func (p *pool) Register(name string, taskFn interface{}) (common.Job) {
-	p.Mutex.Lock()
-	defer p.Mutex.Unlock()
+	p.Lock()
+	defer p.Unlock()
 	return p.backend.Register(p, name, taskFn)
 }

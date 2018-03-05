@@ -2,7 +2,6 @@ package local
 
 import (
 	"time"
-	"github.com/gorhill/cronexpr"
 	"sort"
 	"goest-worker/common"
 	"reflect"
@@ -41,25 +40,24 @@ func (backend *LocalBackend) AddJobToPool(p common.PoolInterface, task common.Jo
 }
 
 func (backend *LocalBackend) AddPeriodicJob(p common.PoolInterface, job common.Job, period interface{}, arguments ... interface{}) (common.PeriodicJob) {
+	p.Lock()
+	defer p.Unlock()
+
+	if !p.IsStopped() {
+		panic(common.ErrorJobAdding)
+	}
+
 	var pJob common.PeriodicJob
 	switch period.(type) {
 	case time.Duration:
-		pJob = &timeDurationPeriodicJob{
-			job:      job,
-			duration: period.(time.Duration),
-			last:     time.Now(),
-			args: 	  arguments,
-		}
-		backend.periodicJob = append(backend.periodicJob, pJob)
+		pJob = common.NewTimeDurationJob(job, period.(time.Duration), arguments ... )
 	case string:
-		pJob = &cronPeriodicJob{
-			job:  job,
-			expr: cronexpr.MustParse(period.(string)),
-			args: 	  arguments,
-		}
+		pJob = common.NewCronJob(job, period.(string), arguments ...)
 	default:
 		panic("unknown period")
 	}
+
+
 	backend.periodicJob = append(backend.periodicJob, pJob)
 	return pJob
 }
@@ -95,7 +93,7 @@ func (backend *LocalBackend) Scheduler (p common.PoolInterface) {
 			return
 		default:
 			maxInterval := lastCall.Add(time.Minute)
-			queue := []nextJob{}
+			queue := []common.NextJob{}
 			JOB_LOOP:
 				for _, job := range periodicJobs {
 					next := time.Now()
@@ -107,20 +105,20 @@ func (backend *LocalBackend) Scheduler (p common.PoolInterface) {
 						}
 
 						// add job to queue
-						queue = append(queue, nextJob{
-							job:  job,
-							next: next,
+						queue = append(queue, common.NextJob{
+							Job:  job,
+							Next: next,
 						})
 					}
 				}
 			// sort queue by time
-			sort.Sort(nextJobSorter(queue))
+			sort.Sort(common.NextJobSorter(queue))
 
 			for _, pJob := range queue {
 				select {
-				case <-time.After(pJob.next.Sub(lastCall)):
+				case <-time.After(pJob.Next.Sub(lastCall)):
 					lastCall = time.Now()
-					pJob.job.Run()
+					pJob.Job.Run()
 				case <- quitPeriodicChan:
 					return
 				}

@@ -2,6 +2,7 @@ package main
 
 import (
 	worker "goest-worker" // "github.com/yobayob/goest-worker"
+	"goest-worker/redis"
 	"time"
 	"fmt"
 )
@@ -21,7 +22,12 @@ func pass(arg string) () {
 }
 
 func main()  {
-	pool := worker.New()
+	pool := worker.New(&redis.RedisBackend{
+		Addr: "localhost:6379",
+		DbNum: 6,
+		QueueName: "tasks",
+		Password: "",
+	})
 	passTimeJob := pool.NewJob(pass)
 	passTimeJob.RunEvery(5 * time.Second, "5 seconds")					// run every 5 second
 	passTimeJob.RunEvery(10 * time.Second, "10 seconds")

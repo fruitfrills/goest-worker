@@ -6,6 +6,7 @@ import (
 	"goest-worker"
 	"goest-worker/common"
 	"goest-worker/redis"
+	"time"
 )
 /*
 Simple task with parameters and results
@@ -30,17 +31,21 @@ func main()  {
 		QueueName: "tasks",
 		Password: "",
 	}).Start(runtime.NumCPU())  	// create workers pool
-	sumJob := pool.NewJob(sum)
-	results, err := sumJob.Bind(true).SetMaxRetry(2).Run(1111, 2156).Wait().Result()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("result is", results[0].(uint))
+	sumJob := pool.NewJob(sum).Bind(true)
+	i := 0
+	go func() {
+		for i < 1000 {
+			sumJob.Run(i, i).Wait()
+			i += 1
+		}
+	}()
+
 	diffJob := pool.NewJob(diff)
-	results, err = diffJob.Run( 144, 12).Wait().Result()
+	results, err := diffJob.Run( 144, 12).Wait().Result()
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("result is", results[0].(int16))
+	time.Sleep(time.Second * 5)
 	pool.Stop()
 }

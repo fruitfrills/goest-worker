@@ -9,26 +9,13 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
-	"strconv"
+	"sort"
 )
 
 var poolMap sync.Map
 
 // redis backend
 type RedisBackend struct {
-	common.PoolBackendInterface
-
-	// can getting free worker from this chan
-	workerPool chan common.WorkerInterface
-
-	// slice of quit channel for soft finish
-	workersPoolQuitChan []chan bool
-
-	// periodic jobs
-	periodicJob []common.PeriodicJob
-
-	// redis queue name
-	QueueName	string
 
 	// redis addr
 	Addr		string
@@ -39,6 +26,18 @@ type RedisBackend struct {
 	// redis db num
 	DbNum		int
 
+	// redis queue name
+	QueueName	string
+
+	// can getting free worker from this chan
+	workerPool chan common.WorkerInterface
+
+	// slice of quit channel for soft finish
+	workersPoolQuitChan []chan bool
+
+	// periodic jobs
+	periodicJob []common.PeriodicJob
+
 	// connect to redis
 	conn		*db.Client
 
@@ -46,12 +45,10 @@ type RedisBackend struct {
 	jobs		sync.Map
 }
 
-
+// add job to redis queue queue
 func (backend *RedisBackend) AddJobToPool(p common.PoolInterface,job common.JobInstance) () {
-
 	redisJob := job.(*jobRedisFuncInstance)
-	redisJob.PubName = redisJob.job.name + strconv.Itoa(int(time.Now().Unix()))
-	redisJob.pubSubChannel = backend.conn.Subscribe(redisJob.PubName)
+	redisJob.pubSubChannel = backend.conn.Subscribe(redisJob.Id)
 	value, err := json.Marshal(job)
 	if err != nil {
 		panic(err)
@@ -60,16 +57,76 @@ func (backend *RedisBackend) AddJobToPool(p common.PoolInterface,job common.JobI
 	return
 }
 
-func (backend *RedisBackend) AddPeriodicJob(common.PoolInterface, common.Job, interface{}, ... interface{}) (job common.PeriodicJob) {
-	panic(`not implemented`)
+func (backend *RedisBackend) AddPeriodicJob(p common.PoolInterface, job common.Job, period interface{}, arguments ... interface{}) (pJob common.PeriodicJob) {
+	p.Lock()
+	defer p.Unlock()
+
+	if !p.IsStopped() {
+		panic(common.ErrorJobAdding)
+	}
+
+	switch period.(type) {
+	case time.Duration:
+		pJob = common.NewTimeDurationJob(job, period.(time.Duration), arguments ... )
+	case string:
+		pJob = common.NewCronJob(job, period.(string), arguments ...)
+	default:
+		panic("unknown period")
+	}
+
+
+	backend.periodicJob = append(backend.periodicJob, pJob)
 	return
 }
 
-func (backend *RedisBackend) Scheduler(common.PoolInterface) {
-	panic(`not implemented`)
-	return
+func (backend *RedisBackend) Scheduler (p common.PoolInterface) {
+	quitPeriodicChan := make(chan bool)
+	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitPeriodicChan)
+	lastCall := time.Now()
+	periodicJobs := append([]common.PeriodicJob(nil), backend.periodicJob...)
+	for {
+		select {
+		case <-quitPeriodicChan:
+			return
+		default:
+			maxInterval := lastCall.Add(time.Minute)
+			queue := []common.NextJob{}
+		JOB_LOOP:
+			for _, job := range periodicJobs {
+				next := time.Now()
+				for {
+					next = job.Next(next)
+					// drop job if job out of interval
+					if next.Sub(maxInterval) > 0 {
+						continue JOB_LOOP
+					}
+
+					// add job to queue
+					queue = append(queue, common.NextJob{
+						Job:  job,
+						Next: next,
+					})
+				}
+			}
+			// sort queue by time
+			sort.Sort(common.NextJobSorter(queue))
+
+			for _, pJob := range queue {
+				select {
+				case <-time.After(pJob.Next.Sub(lastCall)):
+					lastCall = time.Now()
+					pJob.Job.Run()
+				case <- quitPeriodicChan:
+					return
+				}
+
+			}
+		}
+
+	}
 }
 
+// main process
 func (backend *RedisBackend) Processor(common.PoolInterface) {
 	quitChan := make(chan bool)
 	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitChan)

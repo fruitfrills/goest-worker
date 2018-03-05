@@ -9,6 +9,7 @@ import (
 	"log"
 	"errors"
 	"math"
+	"github.com/google/uuid"
 )
 
 type jobRedisFunc struct {
@@ -41,6 +42,8 @@ type jobRedisFuncInstance struct {
 	// main jon
 	job 			*jobRedisFunc
 
+	Id				string
+
 	// argument for func
 	Args    		[]interface{}
 
@@ -61,9 +64,6 @@ type jobRedisFuncInstance struct {
 
 	PoolName		string
 
-	// pubsub name
-	PubName			string
-
 	// for catching panic
 	error			error
 
@@ -77,18 +77,20 @@ type jobRedisFuncInstance struct {
 
 func (job *jobRedisFunc) Run(arguments ... interface{}) (jobInstance common.JobInstance) {
 	instance := &jobRedisFuncInstance{
+		Id:  uuid.New().String(),
+		Args: arguments,
 		job: job,
 		retry: job.maxRetry,
 		done: make(chan bool),
 		PoolName: job.PoolName,
 		JobName: job.name,
 	}
-
-	instance.Args = arguments
 	job.pool.AddJobToPool(instance)
 
 	// waiting and done
+	// TODO quit channel
 	go func() {
+		defer instance.pubSubChannel.Close()
 		var results jobResults
 		msg, err := instance.pubSubChannel.ReceiveMessage()
 		if err != nil{
@@ -106,6 +108,7 @@ func (job *jobRedisFunc) Run(arguments ... interface{}) (jobInstance common.JobI
 		}
 		instance.done <- true
 	}()
+
 	return instance
 }
 
@@ -161,7 +164,7 @@ func (jobInstance *jobRedisFuncInstance) Call() (common.JobInstance) {
 			default:
 				err = common.ErrorJobPanic
 			}
-			jobInstance.conn.Publish(jobInstance.PubName, jobResults{
+			jobInstance.conn.Publish(jobInstance.Id, jobResults{
 				Err: err.Error(),
 			})
 			log.Println(err.Error())
@@ -190,7 +193,7 @@ func (jobInstance *jobRedisFuncInstance) Call() (common.JobInstance) {
 	if err != nil{
 		panic(err)
 	}
-	jobInstance.conn.Publish(jobInstance.PubName, resJson)
+	jobInstance.conn.Publish(jobInstance.Id, resJson)
 	return jobInstance
 }
 
@@ -232,7 +235,6 @@ func uround(f float64) uint {
 }
 
 func replacerIn(fn reflect.Value, i int, arg interface{}) (reflect.Value) {
-	// todo: fix this
 	switch fn.Type().In(i).Kind() {
 	case reflect.Int:
 		return reflect.ValueOf(round(arg.(float64)))
@@ -260,7 +262,6 @@ func replacerIn(fn reflect.Value, i int, arg interface{}) (reflect.Value) {
 }
 
 func replacerOut(fn reflect.Value, i int, arg interface{})(reflect.Value) {
-	// todo: fix this
 	switch fn.Type().Out(i).Kind() {
 	case reflect.Int:
 		return reflect.ValueOf(round(arg.(float64)))
