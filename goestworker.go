@@ -100,3 +100,8 @@ func (p *pool) Unlock() {
 func (p *pool) NewJob(taskFn interface{}) (job common.Job) {
 	return p.backend.NewJob(p, taskFn)
 }
+
+// register job for current pool
+func (p *pool) Register(name string, taskFn interface{}) (common.Job) {
+	return p.backend.Register(p, name, taskFn)
+}

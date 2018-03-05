@@ -7,10 +7,10 @@ import (
 type worker struct {
 	task     		chan common.JobInstance
 	quitChan 		chan bool
-	workerPool		workerPoolType
+	workerPool		common.WorkerPoolType
 }
 
-func NewWorker(workerPool workerPoolType) (common.WorkerInterface) {
+func NewWorker(workerPool common.WorkerPoolType) (common.WorkerInterface) {
 	return &worker{
 		task:     make(chan common.JobInstance),
 		quitChan: make(chan bool),

@@ -27,6 +27,9 @@ type PoolBackendInterface interface {
 
 	// create job on backend
 	NewJob(PoolInterface, interface{}) (Job)
+
+	// register job
+	Register(PoolInterface, string, interface{}) (Job)
 }
 
 type PoolInterface interface {
@@ -39,6 +42,9 @@ type PoolInterface interface {
 
 	// create new job for current pool
 	NewJob(taskFn interface{}) (Job)
+
+	// register job
+	Register(name string, taskFn interface{}) (Job)
 
 	// put job to queue
 	AddJobToPool(job JobInstance)
@@ -64,9 +70,6 @@ type Job interface {
 
 	// count max retry
 	SetMaxRetry(int) Job
-
-	// set pool for work
-	SetPool(PoolInterface) Job
 }
 
 type JobInstance interface {

@@ -46,11 +46,6 @@ type jobFuncInstance struct {
 	retry 			int
 }
 
-func (job *jobFunc) SetPool (p common.PoolInterface) (common.Job) {
-	job.pool = p
-	return job
-}
-
 func (job *jobFunc) SetMaxRetry (i int) (common.Job) {
 	if (i < -1) {
 		panic(`invalid count of retry`)

@@ -8,10 +8,6 @@ import (
 	"reflect"
 )
 
-
-// channel of channel for balancing tasks between workers
-type workerPoolType chan common.WorkerInterface
-
 // local backend
 type LocalBackend struct {
 	common.PoolBackendInterface
@@ -69,6 +65,8 @@ func (backend *LocalBackend) AddPeriodicJob(p common.PoolInterface, job common.J
 }
 
 func (backend *LocalBackend) Processor(common.PoolInterface) {
+	quitChan := make(chan bool)
+	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitChan)
 	for {
 		select {
 		case job := <-backend.jobQueue:
@@ -80,6 +78,8 @@ func (backend *LocalBackend) Processor(common.PoolInterface) {
 			// get free worker and send task
 			worker = <-backend.workerPool
 			worker.AddJob(job)
+		case <- quitChan:
+			return
 		}
 	}
 }
@@ -139,7 +139,7 @@ func (backend *LocalBackend) Start(p common.PoolInterface, count int) (common.Po
 	}
 
 	backend.jobQueue = make(chan common.JobInstance)
-	backend.workerPool = make(workerPoolType, count)
+	backend.workerPool = make(common.WorkerPoolType, count)
 	for i := 0; i < count; i++ {
 		worker := NewWorker(backend.workerPool)
 		backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, worker.GetQuitChan())
@@ -192,4 +192,8 @@ func (backend *LocalBackend) NewJob(p common.PoolInterface, taskFn interface{}) 
 		maxRetry: -1,
 		pool: p,
 	}
+}
+
+func (backend *LocalBackend) Register (p common.PoolInterface, name string, taskFn interface{}) (common.Job) {
+	return backend.NewJob(p, taskFn)
 }
