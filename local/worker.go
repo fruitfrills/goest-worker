@@ -43,6 +43,7 @@ func (w *worker) Start() {
 					return
 				}
 				work.Call()
+
 			case <-w.quitChan:
 				return
 			}

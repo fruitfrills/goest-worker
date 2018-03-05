@@ -96,23 +96,23 @@ func (backend *LocalBackend) Scheduler (p common.PoolInterface) {
 		default:
 			maxInterval := lastCall.Add(time.Minute)
 			queue := []nextJob{}
-		JOB_LOOP:
-			for _, job := range periodicJobs {
-				next := time.Now()
-				for {
-					next = job.Next(next)
-					// drop job if job out of interval
-					if next.Sub(maxInterval) > 0 {
-						continue JOB_LOOP
-					}
+			JOB_LOOP:
+				for _, job := range periodicJobs {
+					next := time.Now()
+					for {
+						next = job.Next(next)
+						// drop job if job out of interval
+						if next.Sub(maxInterval) > 0 {
+							continue JOB_LOOP
+						}
 
-					// add job to queue
-					queue = append(queue, nextJob{
-						job:  job,
-						next: next,
-					})
+						// add job to queue
+						queue = append(queue, nextJob{
+							job:  job,
+							next: next,
+						})
+					}
 				}
-			}
 			// sort queue by time
 			sort.Sort(nextJobSorter(queue))
 

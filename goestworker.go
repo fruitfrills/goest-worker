@@ -103,5 +103,7 @@ func (p *pool) NewJob(taskFn interface{}) (job common.Job) {
 
 // register job for current pool
 func (p *pool) Register(name string, taskFn interface{}) (common.Job) {
+	p.Mutex.Lock()
+	defer p.Mutex.Unlock()
 	return p.backend.Register(p, name, taskFn)
 }
