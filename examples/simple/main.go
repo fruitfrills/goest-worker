@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"goest-worker"
 	"goest-worker/common"
+	"time"
 )
 /*
 Simple task with parameters and results
@@ -36,5 +37,8 @@ func main()  {
 		panic(err)
 	}
 	fmt.Println("result is", results[0].(int))
+	J := diffJob.Run( 144, 12)
+	time.After(time.Second * 3)
+	J.Wait().Result()
 	pool.Stop()
 }

@@ -16,9 +16,6 @@ type PoolBackendInterface interface {
 	// start process for calculate tasks
 	Scheduler(PoolInterface)
 
-	//process pool
-	Processor(PoolInterface)
-
 	// stop pool
 	Stop(PoolInterface) PoolInterface
 
@@ -30,6 +27,12 @@ type PoolBackendInterface interface {
 
 	// register job
 	Register(PoolInterface, string, interface{}) (Job)
+
+	// waiter
+	AddWaiter(string, chan bool)
+
+	// set done
+	Done(id string)
 }
 
 type PoolInterface interface {
@@ -52,9 +55,13 @@ type PoolInterface interface {
 	// put job to scheduler
 	AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob)
 
+	AddWaiter(string, chan bool)
+
 	// check stop
 	IsStopped() bool
 
+	// set done
+	Done(id string)
 }
 
 type Job interface {

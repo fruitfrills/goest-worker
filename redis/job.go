@@ -78,12 +78,12 @@ type jobRedisFuncInstance struct {
 func (job *jobRedisFunc) Run(arguments ... interface{}) (jobInstance common.JobInstance) {
 	instance := &jobRedisFuncInstance{
 		Id:  uuid.New().String(),
+		PoolName: job.PoolName,
+		JobName: job.name,
 		Args: arguments,
 		job: job,
 		retry: job.maxRetry,
 		done: make(chan bool),
-		PoolName: job.PoolName,
-		JobName: job.name,
 	}
 	job.pool.AddJobToPool(instance)
 
@@ -212,6 +212,7 @@ func (jobInstance *jobRedisFuncInstance) Retry() (job common.JobInstance) {
 	return
 }
 
+// json helpers
 func round(f float64) int {
 	n1, n2 := math.Modf(f) // splits the float into components
 
@@ -233,6 +234,7 @@ func uround(f float64) uint {
 
 	return (n)
 }
+
 
 func replacerIn(fn reflect.Value, i int, arg interface{}) (reflect.Value) {
 	switch fn.Type().In(i).Kind() {

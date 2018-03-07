@@ -5,11 +5,12 @@ import (
 	"sort"
 	"goest-worker/common"
 	"reflect"
+	"sync"
+	"fmt"
 )
 
 // local backend
 type LocalBackend struct {
-	common.PoolBackendInterface
 
 	// can getting free worker from this chan
 	workerPool chan common.WorkerInterface
@@ -23,6 +24,11 @@ type LocalBackend struct {
 	// periodic jobs
 	periodicJob []common.PeriodicJob
 
+	// waited task
+	waitedJob sync.Map
+
+	// chan of waited job
+	waitChan chan string
 }
 
 // put job to queue
@@ -62,6 +68,7 @@ func (backend *LocalBackend) AddPeriodicJob(p common.PoolInterface, job common.J
 	return pJob
 }
 
+
 func (backend *LocalBackend) Processor(common.PoolInterface) {
 	quitChan := make(chan bool)
 	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitChan)
@@ -81,7 +88,6 @@ func (backend *LocalBackend) Processor(common.PoolInterface) {
 		}
 	}
 }
-
 func (backend *LocalBackend) Scheduler (p common.PoolInterface) {
 	quitPeriodicChan := make(chan bool)
 	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitPeriodicChan)
@@ -138,12 +144,14 @@ func (backend *LocalBackend) Start(p common.PoolInterface, count int) (common.Po
 
 	backend.jobQueue = make(chan common.JobInstance)
 	backend.workerPool = make(common.WorkerPoolType, count)
+	backend.waitChan = make(chan string)
 	for i := 0; i < count; i++ {
 		worker := NewWorker(backend.workerPool)
 		backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, worker.GetQuitChan())
 		worker.Start()
 	}
 	// main process
+	go backend.Waiting();
 	go backend.Processor(p)
 
 
@@ -172,6 +180,7 @@ func (backend *LocalBackend) Stop(p common.PoolInterface) (common.PoolInterface)
 	backend.workersPoolQuitChan = [](chan bool){};
 	close(backend.jobQueue)
 	close(backend.workerPool)
+	close(backend.waitChan)
 	return p
 }
 
@@ -194,4 +203,32 @@ func (backend *LocalBackend) NewJob(p common.PoolInterface, taskFn interface{}) 
 
 func (backend *LocalBackend) Register (p common.PoolInterface, name string, taskFn interface{}) (common.Job) {
 	return backend.NewJob(p, taskFn)
+}
+
+func (backend *LocalBackend) AddWaiter(s string,w chan bool) {
+	backend.waitedJob.Store(s, w)
+}
+
+func (backend *LocalBackend) Waiting () {
+	quitChan := make(chan bool)
+	backend.workersPoolQuitChan = append(backend.workersPoolQuitChan, quitChan)
+	for {
+		select {
+		case <- quitChan:
+			return
+		case id := <- backend.waitChan:
+			waitChan, ok := backend.waitedJob.Load(id); if ok{
+				fmt.Println(id)
+				waiter := waitChan.(chan bool)
+				fmt.Println(`1`)
+				waiter <- true
+				fmt.Println(`2`)
+				backend.waitedJob.Delete(id)
+			}
+		}
+	}
+}
+
+func (backend *LocalBackend) Done (id string) {
+	backend.waitChan <- id
 }

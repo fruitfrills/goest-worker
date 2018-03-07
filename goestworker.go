@@ -107,3 +107,11 @@ func (p *pool) Register(name string, taskFn interface{}) (common.Job) {
 	defer p.Unlock()
 	return p.backend.Register(p, name, taskFn)
 }
+
+func (p* pool) AddWaiter(s string,w chan bool) {
+	p.backend.AddWaiter(s, w)
+}
+
+func (p* pool) Done(id string) {
+	go p.backend.Done(id)
+}

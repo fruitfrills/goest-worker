@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"errors"
 	"goest-worker/common"
+	"github.com/google/uuid"
+	"sync"
 )
 
 type jobFunc struct {
@@ -24,6 +26,10 @@ type jobFunc struct {
 type jobFuncInstance struct {
 	common.JobInstance
 	common.JobInjection
+
+	// id tasks
+	id 				string
+
 	// main jon
 	job 			*jobFunc
 
@@ -34,14 +40,15 @@ type jobFuncInstance struct {
 	results 		[]reflect.Value
 
 	// done channel for waiting
-	done    		chan bool
-
+	done    		bool
 
 	// for catching panic
 	error			error
 
 	// retry
 	retry 			int
+
+	sync.RWMutex
 }
 
 func (job *jobFunc) SetMaxRetry (i int) (common.Job) {
@@ -60,8 +67,9 @@ func (job *jobFunc) Run(arguments ... interface{}) (common.JobInstance) {
 		in[i] = reflect.ValueOf(arg)
 	}
 	instance := &jobFuncInstance{
+		id:  uuid.New().String(),
 		job: job,
-		done: make(chan bool),
+		done: false,
 		retry: job.maxRetry,
 	}
 	// if job.bind == true, set jobinstance as first argument
@@ -103,22 +111,34 @@ func (jobInstance *jobFuncInstance) Call() common.JobInstance {
 			}
 			jobInstance.error = err
 		}
-		close(jobInstance.done)
 	}()
 	jobInstance.results = jobInstance.job.fn.Call(jobInstance.args)
+	jobInstance.Lock()
+	jobInstance.done = true
+	jobInstance.Unlock()
+	jobInstance.job.pool.Done(jobInstance.id)
 	return jobInstance
 }
 
 // waiting tasks, call this after `Do`
 func (jobInstance *jobFuncInstance) Wait() (common.JobInstance) {
-	<-jobInstance.done
+	jobInstance.Lock()
+	if jobInstance.done {
+		return jobInstance
+	}
+	waitChan := make(chan bool)
+	jobInstance.job.pool.AddWaiter(jobInstance.id, waitChan)
+	jobInstance.Unlock()
+	<- waitChan
 	return jobInstance
 }
 
 // dropping job
 func (jobInstance *jobFuncInstance) Drop () (common.JobInstance) {
+	jobInstance.Lock()
+	defer jobInstance.Unlock()
 	jobInstance.error = common.ErrorJobDropped
-	jobInstance.done <- false
+	jobInstance.done = true
 	return jobInstance
 }
 
