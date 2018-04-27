@@ -1,7 +1,7 @@
 package redis
 
 import (
-	"goest-worker/common"
+	"github.com/yobayob/goest-worker/common"
 	"reflect"
 	"encoding/json"
 	db "github.com/go-redis/redis"

@@ -3,8 +3,8 @@ package goest_worker
 import (
 	"sync/atomic"
 	"sync"
-	"goest-worker/common"
-	"goest-worker/local"
+	"github.com/yobayob/goest-worker/common"
+	"github.com/yobayob/goest-worker/local"
 )
 
 // pool states

@@ -1,8 +1,8 @@
 package main
 
 import (
-	worker "goest-worker" // "github.com/yobayob/goest-worker"
-	"goest-worker/redis"
+	worker "github.com/yobayob/goest-worker" // "github.com/yobayob/goest-worker"
+	"github.com/yobayob/goest-worker/redis"
 	"time"
 	"fmt"
 )

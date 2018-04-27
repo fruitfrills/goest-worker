@@ -1,7 +1,7 @@
 package local
 
 import (
-	"goest-worker/common"
+	"github.com/yobayob/goest-worker/common"
 )
 
 type worker struct {

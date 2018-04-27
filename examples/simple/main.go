@@ -3,8 +3,8 @@ package main
 import (
 	"runtime"
 	"fmt"
-	"goest-worker"
-	"goest-worker/common"
+	"github.com/yobayob/goest-worker"
+	"github.com/yobayob/goest-worker/common"
 )
 /*
 Simple task with parameters and results

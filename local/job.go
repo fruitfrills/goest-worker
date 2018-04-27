@@ -3,7 +3,7 @@ package local
 import (
 	"reflect"
 	"errors"
-	"goest-worker/common"
+	"github.com/yobayob/goest-worker/common"
 )
 
 type jobFunc struct {

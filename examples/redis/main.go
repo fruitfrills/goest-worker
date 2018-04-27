@@ -3,9 +3,9 @@ package main
 import (
 	"runtime"
 	"fmt"
-	"goest-worker"
-	"goest-worker/common"
-	"goest-worker/redis"
+	"github.com/yobayob/goest-worker"
+	"github.com/yobayob/goest-worker/common"
+	"github.com/yobayob/goest-worker/redis"
 	"time"
 )
 /*

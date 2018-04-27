@@ -2,7 +2,7 @@ package local
 
 import (
 	"testing"
-	"goest-worker/common"
+	"github.com/yobayob/goest-worker/common"
 	"time"
 )
 
