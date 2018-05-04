@@ -29,15 +29,15 @@ type LocalBackend struct {
 func (backend *LocalBackend) AddJobToPool(p common.PoolInterface, task common.JobInstance) () {
 	go func() {
 		p.Lock()
-		defer p.Unlock()
-
 		// check state
 		// is pool is stopped, job is dropped ...
 		if p.IsStopped() {
 			task.Drop()
 			return
 		}
-
+		p.Unlock()
+		
+		// TODO: pool may be stopped.
 		backend.jobQueue <- task
 	}()
 }
