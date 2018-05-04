@@ -27,16 +27,19 @@ type LocalBackend struct {
 
 // put job to queue
 func (backend *LocalBackend) AddJobToPool(p common.PoolInterface, task common.JobInstance) () {
-	p.Lock()
-	defer p.Unlock()
+	go func() {
+		p.Lock()
+		defer p.Unlock()
 
-	// check state
-	// is pool is stopped, job is dropped ...
-	if p.IsStopped() {
-		task.Drop()
-		return
-	}
-	backend.jobQueue <- task
+		// check state
+		// is pool is stopped, job is dropped ...
+		if p.IsStopped() {
+			task.Drop()
+			return
+		}
+
+		backend.jobQueue <- task
+	}()
 }
 
 func (backend *LocalBackend) AddPeriodicJob(p common.PoolInterface, job common.Job, period interface{}, arguments ... interface{}) (common.PeriodicJob) {
