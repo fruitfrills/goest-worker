@@ -1,109 +1,206 @@
 package goest_worker
 
 import (
-	"sync/atomic"
 	"sync"
-	"github.com/yobayob/goest-worker/common"
-	"github.com/yobayob/goest-worker/local"
+	"context"
+	"time"
+	"sort"
+	"reflect"
+	"errors"
 )
 
-// pool states
-const (
-	POOL_STOPPED int32 = iota
-	POOL_STARTED
-)
-
-// main wrapper over workers pool
-type pool struct {
-
-	// implements
-	common.PoolInterface
-
-	// state mutex
+type goestWorker struct {
 	sync.Mutex
+	ctx context.Context
+	cancel context.CancelFunc
+	workerPool chan WorkerInterface
+	jobQueue chan jobCall
+	periodicJob []PeriodicJob
 
-	// pool's state
-	state int32
-
-	// backend
-	backend 		common.PoolBackendInterface
+	wg sync.WaitGroup
 }
 
-// create pool of workers
-func New(args ... common.PoolBackendInterface) (common.PoolInterface) {
-	if len(args) > 1 {
-		panic("invalid count args")
+func (backend *goestWorker) Start(ctx context.Context, count int) GoestWorker {
+
+	ctx, cancel := context.WithCancel(ctx)
+	backend.ctx = ctx
+	backend.cancel = cancel
+	backend.jobQueue = make(chan jobCall)
+
+	backend.workerPool = make(WorkerPoolType, count)
+	for i := 0; i < count; i++ {
+		worker := newWorker(backend.workerPool, &backend.wg)
+		worker.Start(ctx)
 	}
-	if len(args) == 1 {
-		return &pool{
-			backend: 		args[0],
-			state:          POOL_STOPPED,
+
+	proccessor(ctx, backend.jobQueue, backend.workerPool)
+	if  len(backend.periodicJob) != 0 {
+		periodicProcessor(ctx, backend.periodicJob)
+	}
+
+	// set state to started
+	return backend
+}
+
+func (backend *goestWorker) wait(ctx context.Context, wg *sync.WaitGroup) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		done <- struct{}{}
+	}()
+	select {
+	case <- done:
+		break
+	case <- ctx.Done():
+		break
+	}
+	return
+}
+
+func (backend *goestWorker) Done() {
+	backend.wg.Done()
+}
+
+func (backend *goestWorker) Wait() {
+	backend.wait(backend.ctx, &backend.wg)
+}
+
+func (backend *goestWorker) Stop() {
+	backend.cancel()
+	close(backend.jobQueue)
+	close(backend.workerPool)
+}
+
+func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType) {
+	go func() {
+		for {
+			var job jobCall
+			select {
+
+			case job = <-jobQueue:
+
+				if job == nil {
+					return
+				}
+				break
+			case <- ctx.Done():
+				return
+			}
+
+			select {
+			case <- ctx.Done():
+				return
+			case worker := <- pool:
+				worker.AddJob(job)
+			}
 		}
+	}()
+}
+
+func periodicProcessor (ctx context.Context, periodicJobs []PeriodicJob) {
+	go func() {
+		lastCall := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				maxInterval := lastCall.Add(time.Minute)
+				queue := []NextJob{}
+			JOB_LOOP:
+				for _, job := range periodicJobs {
+					next := time.Now()
+					for {
+						next = job.Next(next)
+						// drop job if job out of interval
+						if next.Sub(maxInterval) > 0 {
+							continue JOB_LOOP
+						}
+
+						// add job to queue
+						queue = append(queue, NextJob{
+							Job:  job,
+							Next: next,
+						})
+					}
+				}
+				
+				if len(queue) == 0 {
+					select {
+					case <- time.After(time.Second * 30):
+						continue
+					case <- ctx.Done():
+						return
+					}
+
+				}
+				
+				// sort queue by time
+				sort.Sort(NextJobSorter(queue))
+
+				for _, pJob := range queue {
+					select {
+					case <-time.After(pJob.Next.Sub(lastCall)):
+						lastCall = time.Now()
+						pJob.Job.Run()
+					case <- ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+}
+
+// create simple jobs
+func (backend *goestWorker) NewJob(taskFn interface{}) (Job) {
+
+	fn := reflect.ValueOf(taskFn)
+	fnType := fn.Type()
+
+	if fnType.Kind() != reflect.Func {
+		panic("taskFn must be func")
 	}
-	return &pool{
-		backend: 		&local.LocalBackend{},
-		state:          POOL_STOPPED,
+
+	return &jobFunc{
+		fn: fn,
+		maxRetry: -1,
+		pool: backend,
 	}
 }
 
 // put job to queue
-func (p *pool) AddJobToPool(task common.JobInstance) () {
-	p.backend.AddJobToPool(p, task)
-}
-
-func (p *pool) AddPeriodicJob(job common.Job, period interface{}, arguments ... interface{}) (common.PeriodicJob) {
-	return p.backend.AddPeriodicJob(p, job, period, arguments ...)
-}
-
-// check state
-func (p *pool) IsStopped() (bool) {
-	return atomic.LoadInt32(&(p.state)) == POOL_STOPPED
-}
-
-// set state
-func (p *pool) setState(state int32) () {
-	atomic.StoreInt32(&(p.state), int32(state))
-}
-
-
-// close all channels, stopping workers and periodic tasks
-// if the dispatcher is restarted, all tasks will be stoppep. You need starts tasks again ...
-func (p *pool) Stop() (common.PoolInterface) {
-	p.Lock()
-	defer func() {
-		p.setState(POOL_STOPPED)
-		p.Unlock()
+func (backend *goestWorker) AddJobToPool(job jobCall) () {
+	backend.wg.Add(1)
+	go func() {
+		select {
+		case <- backend.ctx.Done():
+			return
+		default:
+			backend.jobQueue <- job
+		}
 	}()
-	return p.backend.Stop(p)
 }
 
-func (p *pool) Start(count int) (common.PoolInterface) {
-	p.Lock()
-	defer func() {
-		p.setState(POOL_STARTED)
-		p.Unlock()
-	}()
-	return p.backend.Start(p, count)
+func (backend *goestWorker) AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error) {
+	var pJob PeriodicJob
+	switch period.(type) {
+	case time.Duration:
+		pJob = NewTimeDurationJob(job, period.(time.Duration), arguments ...)
+	case string:
+		pJob = NewCronJob(job, period.(string), arguments ...)
+	}
+	if pJob == nil {
+		return nil, errors.New("invalid period")
+	}
+	backend.periodicJob = append(backend.periodicJob, pJob)
+	return pJob, nil
 }
 
-// locker
-func (p *pool) Lock() {
-	p.Mutex.Lock()
+func (backend *goestWorker) Context() context.Context {
+	return backend.ctx
 }
 
-// unlocker
-func (p *pool) Unlock() {
-	p.Mutex.Unlock()
-}
-
-// create job for current pool
-func (p *pool) NewJob(taskFn interface{}) (job common.Job) {
-	return p.backend.NewJob(p, taskFn)
-}
-
-// register job for current pool
-func (p *pool) Register(name string, taskFn interface{}) (common.Job) {
-	p.Lock()
-	defer p.Unlock()
-	return p.backend.Register(p, name, taskFn)
+func New() GoestWorker {
+	return &goestWorker{}
 }

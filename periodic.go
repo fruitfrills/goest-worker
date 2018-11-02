@@ -1,4 +1,4 @@
-package common
+package goest_worker
 
 import (
 	"github.com/gorhill/cronexpr"
@@ -36,10 +36,12 @@ func (pJob *cronPeriodicJob) Run() () {
 	pJob.setState(job_busy)
 	jobInstance := pJob.job.Run(pJob.args ...)
 	go func() {
-		jobInstance.Wait()
-		pJob.Lock()
-		pJob.setState(job_free)
-		pJob.Unlock()
+		select {
+		case <- jobInstance.Context().Done():
+			pJob.Lock()
+			pJob.setState(job_free)
+			pJob.Unlock()
+		}
 	}()
 	return
 }
@@ -109,10 +111,12 @@ func (pJob *timeDurationPeriodicJob) Run() () {
 	jobInstance := pJob.job.Run(pJob.args ...)
 
 	go func() {
-		jobInstance.Wait()
-		pJob.Lock()
-		pJob.setState(job_free)
-		pJob.Unlock()
+		select {
+			case <- jobInstance.Context().Done():
+				pJob.Lock()
+				pJob.setState(job_free)
+				pJob.Unlock()
+		}
 	}()
 
 	return

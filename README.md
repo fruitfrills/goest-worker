@@ -16,10 +16,10 @@ go get github.com/yobayob/goest-worker
 package main
 
 import (
-	worker "goest-worker/local"
+	worker "github.com/yobayob/goest-worker"
 	"runtime"
 	"fmt"
-	"goest-worker"
+	"context"
 )
 /*
 Simple task with parameters and results
@@ -38,7 +38,7 @@ func diff(a, b int) (int) {
 }
 
 func main()  {
-	pool := worker.New().Start(runtime.NumCPU())  	// create workers pool
+	pool := worker.New().Start(context.TODO(), runtime.NumCPU())  	// create workers pool
 	sumJob := pool.NewJob(sum)
 	results, err := sumJob.Run(1111, 2156).Wait().Result()
 	if err != nil {
@@ -61,4 +61,4 @@ func main()  {
 - Periodical Jobs
 
 ### Examples
-see examples https://github.com/yobayob/goest-worker/tree/master/examples 
+see examples https://github.com/yobayob/goest-worker/tree/master/examples
