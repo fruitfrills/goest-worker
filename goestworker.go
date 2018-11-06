@@ -9,36 +9,51 @@ import (
 	"errors"
 )
 
+// GoestWorker local worker's pool dispatcher
 type goestWorker struct {
-	sync.Mutex
-	ctx context.Context
-	cancel context.CancelFunc
-	workerPool chan WorkerInterface
-	jobQueue chan jobCall
+
+	// Inner context for worker's pool
+	ctx         context.Context
+
+	// Cancel context func
+	cancel      context.CancelFunc
+
+	// Chan for free workers
+	workerPool  chan WorkerInterface
+
+	// Chan for job
+	jobQueue    chan jobCall
+
+	// Periodic jobs
 	periodicJob []PeriodicJob
+
 
 	wg sync.WaitGroup
 }
 
+// Run worker pool
 func (backend *goestWorker) Start(ctx context.Context, count int) GoestWorker {
 
+	// create new context
 	ctx, cancel := context.WithCancel(ctx)
 	backend.ctx = ctx
 	backend.cancel = cancel
 	backend.jobQueue = make(chan jobCall)
-
 	backend.workerPool = make(WorkerPoolType, count)
+
+	// create workers
 	for i := 0; i < count; i++ {
 		worker := newWorker(backend.workerPool, &backend.wg)
 		worker.Start(ctx)
 	}
 
+	// run processor
 	proccessor(ctx, backend.jobQueue, backend.workerPool)
-	if  len(backend.periodicJob) != 0 {
+
+	// run periodic processor
+	if len(backend.periodicJob) != 0 {
 		periodicProcessor(ctx, backend.periodicJob)
 	}
-
-	// set state to started
 	return backend
 }
 
@@ -49,9 +64,9 @@ func (backend *goestWorker) wait(ctx context.Context, wg *sync.WaitGroup) {
 		done <- struct{}{}
 	}()
 	select {
-	case <- done:
+	case <-done:
 		break
-	case <- ctx.Done():
+	case <-ctx.Done():
 		break
 	}
 	return
@@ -65,94 +80,15 @@ func (backend *goestWorker) Wait() {
 	backend.wait(backend.ctx, &backend.wg)
 }
 
+// Worker pool stop
 func (backend *goestWorker) Stop() {
 	backend.cancel()
 	close(backend.jobQueue)
 	close(backend.workerPool)
 }
 
-func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType) {
-	go func() {
-		for {
-			var job jobCall
-			select {
 
-			case job = <-jobQueue:
-
-				if job == nil {
-					return
-				}
-				break
-			case <- ctx.Done():
-				return
-			}
-
-			select {
-			case <- ctx.Done():
-				return
-			case worker := <- pool:
-				worker.AddJob(job)
-			}
-		}
-	}()
-}
-
-func periodicProcessor (ctx context.Context, periodicJobs []PeriodicJob) {
-	go func() {
-		lastCall := time.Now()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				maxInterval := lastCall.Add(time.Minute)
-				queue := []NextJob{}
-			JOB_LOOP:
-				for _, job := range periodicJobs {
-					next := time.Now()
-					for {
-						next = job.Next(next)
-						// drop job if job out of interval
-						if next.Sub(maxInterval) > 0 {
-							continue JOB_LOOP
-						}
-
-						// add job to queue
-						queue = append(queue, NextJob{
-							Job:  job,
-							Next: next,
-						})
-					}
-				}
-				
-				if len(queue) == 0 {
-					select {
-					case <- time.After(time.Second * 30):
-						continue
-					case <- ctx.Done():
-						return
-					}
-
-				}
-				
-				// sort queue by time
-				sort.Sort(NextJobSorter(queue))
-
-				for _, pJob := range queue {
-					select {
-					case <-time.After(pJob.Next.Sub(lastCall)):
-						lastCall = time.Now()
-						pJob.Job.Run()
-					case <- ctx.Done():
-						return
-					}
-				}
-			}
-		}
-	}()
-}
-
-// create simple jobs
+// Create simple jobs
 func (backend *goestWorker) NewJob(taskFn interface{}) (Job) {
 
 	fn := reflect.ValueOf(taskFn)
@@ -163,18 +99,17 @@ func (backend *goestWorker) NewJob(taskFn interface{}) (Job) {
 	}
 
 	return &jobFunc{
-		fn: fn,
+		fn:       fn,
 		maxRetry: -1,
-		pool: backend,
+		pool:     backend,
 	}
 }
 
-// put job to queue
 func (backend *goestWorker) AddJobToPool(job jobCall) () {
 	backend.wg.Add(1)
 	go func() {
 		select {
-		case <- backend.ctx.Done():
+		case <-backend.ctx.Done():
 			return
 		default:
 			backend.jobQueue <- job
@@ -203,4 +138,86 @@ func (backend *goestWorker) Context() context.Context {
 
 func New() GoestWorker {
 	return &goestWorker{}
+}
+
+func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType) {
+	go func() {
+		for {
+			var job jobCall
+			select {
+
+			case job = <-jobQueue:
+
+				if job == nil {
+					return
+				}
+				break
+			case <-ctx.Done():
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case worker := <-pool:
+				worker.AddJob(job)
+			}
+		}
+	}()
+}
+
+// periodicProcessor is func for running periodic jobs
+func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
+	go func() {
+		lastCall := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				maxInterval := lastCall.Add(time.Minute)
+				queue := []NextJob{}
+			JOB_LOOP:
+				for _, job := range periodicJobs {
+					next := time.Now()
+					for {
+						next = job.Next(next)
+						// drop job if job out of interval
+						if next.Sub(maxInterval) > 0 {
+							continue JOB_LOOP
+						}
+
+						// add job to queue
+						queue = append(queue, NextJob{
+							Job:  job,
+							Next: next,
+						})
+					}
+				}
+
+				if len(queue) == 0 {
+					select {
+					case <-time.After(time.Second * 30):
+						continue
+					case <-ctx.Done():
+						return
+					}
+
+				}
+
+				// sort queue by time
+				sort.Sort(NextJobSorter(queue))
+
+				for _, pJob := range queue {
+					select {
+					case <-time.After(pJob.Next.Sub(lastCall)):
+						lastCall = time.Now()
+						pJob.Job.Run()
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
 }

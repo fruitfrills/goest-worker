@@ -54,13 +54,6 @@ func (pJob *cronPeriodicJob) isBusy() bool {
 	return atomic.LoadInt32(&(pJob.state)) == job_busy
 }
 
-
-/**
-pJob =
-	case string:
-		pJob =
- */
-
 func NewTimeDurationJob(job Job, duration time.Duration, arguments ... interface{}) (PeriodicJob) {
 	return  &timeDurationPeriodicJob{
 		job:      job,

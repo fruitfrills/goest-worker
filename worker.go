@@ -6,7 +6,11 @@ import (
 )
 
 type worker struct {
+
+	// Chan for jobs
 	task 				chan jobCall
+
+	// Chan for send free message
 	pool				WorkerPoolType
 	wg 					*sync.WaitGroup
 }
