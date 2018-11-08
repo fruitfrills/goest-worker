@@ -9,28 +9,20 @@ import (
 	"bufio"
 	"strings"
 	"fmt"
+	"path/filepath"
+	"strconv"
 )
 
-func DownloadFile(self goest_worker.JobInstance, uri string) error {
-
-
-	// this is for example
-	select {
-	case <-self.Context().Done():
-		 return nil
-	default:
-		break
-	}
-
-	fmt.Println("start download", uri)
-	// Get the data
+func DownloadFile(uri, fp string) error {
+	fmt.Println(uri, "process...")
 	resp, err := http.Get("http://" + uri)
 	if err != nil {
+		fmt.Println(uri, "return error", err.Error())
 		return err
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create("/dev/null")
+	out, err := os.Create(fp)
 	if err != nil {
 		fmt.Println(uri, "return error", err.Error())
 		return err
@@ -40,37 +32,33 @@ func DownloadFile(self goest_worker.JobInstance, uri string) error {
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		fmt.Println(uri, "return error", err.Error())
 		return err
 	}
-	fmt.Println("download success", uri)
+	fmt.Println(uri, "success downloaded")
 	return nil
 }
 
 func main()  {
-	pool := goest_worker.New()
+	pool := goest_worker.New().Start(context.TODO(), 8)
 	defer pool.Stop()
-	downloadJob := pool.NewJob(DownloadFile).Bind(true)
-	pool.Start(context.TODO(), 8)
+
+	downloadJob := pool.NewJob(DownloadFile)
 	file, err := os.Open("./top.txt")
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
-	i := 0
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		if i > 50 {
-			break
-		}
-		s := strings.TrimSpace(scanner.Text())
-		downloadJob.Run(s)
-		fmt.Println("put to pool:", s)
-		i += 1
-
+		args := strings.Split(strings.TrimSpace(scanner.Text()), " ")
+		fmt.Println("put new job to pool", args[0])
+		priority, _ := strconv.Atoi(args[1])
+		uri := args[0]
+		downloadJob.RunWithPriority(priority, uri, filepath.Join("/tmp/", uri))
 	}
 	if err := scanner.Err(); err != nil {
 		panic(err)
 	}
+	fmt.Println("Waiting for the pool to complete all tasks.")
 	pool.Wait()
 }
