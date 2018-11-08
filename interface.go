@@ -9,17 +9,17 @@ type workerPool interface {
 	Context() context.Context
 	AddJobToPool(jobCall) ()
 	AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error)
-	Done()
 }
 
 type jobCall interface {
-	Call()
+	call()
+	Priority() int
 }
 
 type WorkerPoolType chan WorkerInterface
 
-type GoestWorker interface {
-	Start(ctx context.Context, count int) GoestWorker
+type Pool interface {
+	Start(ctx context.Context, count int) Pool
 	Stop()
 	Context() context.Context
 	NewJob(taskFn interface{}) (Job)
@@ -30,6 +30,7 @@ type Job interface {
 	Bind(val bool) Job
 	Run(args ... interface{}) JobInstance
 	RunEvery(period interface{}, args ... interface{}) (PeriodicJob, error)
+	RunWithPriority(priority int, args ... interface{}) JobInstance
 }
 
 type JobInstance interface {

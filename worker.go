@@ -2,7 +2,7 @@ package goest_worker
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 )
 
 type worker struct {
@@ -12,14 +12,16 @@ type worker struct {
 
 	// Chan for send free message
 	pool				WorkerPoolType
-	wg 					*sync.WaitGroup
+
+	// counter from pool for decrement waiting tasks
+	counter 					*uint64
 }
 
-func newWorker(workerPool WorkerPoolType, wg *sync.WaitGroup) (WorkerInterface)  {
+func newWorker(workerPool WorkerPoolType, counter *uint64) (WorkerInterface)  {
 	return &worker{
 		task: make(chan jobCall),
 		pool: workerPool,
-		wg: wg,
+		counter: counter,
 	}
 }
 
@@ -40,8 +42,8 @@ func (w *worker) Start(ctx context.Context) {
 				if job == nil {
 					return
 				}
-				job.Call()
-				w.wg.Done()
+				job.call()
+				atomic.AddUint64(w.counter, ^uint64(0))
 			}
 		}
 	}()

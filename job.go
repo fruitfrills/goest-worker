@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"context"
 	"errors"
+	"fmt"
 )
 
 // jobFunc is the wrapper around any function which can be execute in pool
@@ -23,6 +24,7 @@ type jobFuncInstance struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	error   error
+	priority int
 }
 
 // Run - running function in any arguments
@@ -37,6 +39,31 @@ func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
 		job:    job,
 		ctx:    ctx,
 		cancel: cancel,
+	}
+	// if job.bind == true, set jobinstance as first argument
+	if job.bind {
+		in = append([]reflect.Value{reflect.ValueOf(instance)}, in[0:len(in)-1]...)
+	}
+	instance.args = in
+	job.pool.AddJobToPool(instance)
+	return instance
+}
+
+func (job *jobFuncInstance) debug() {
+	fmt.Println("RUNNING", job.args[0].Interface().(string))
+}
+
+func (job *jobFunc) RunWithPriority(priority int, arguments ... interface{}) (JobInstance) {
+	in := make([]reflect.Value, job.fn.Type().NumIn())
+	for i, arg := range arguments {
+		in[i] = reflect.ValueOf(arg)
+	}
+	ctx, cancel := context.WithCancel(job.pool.Context())
+	instance := &jobFuncInstance{
+		job:    job,
+		ctx:    ctx,
+		cancel: cancel,
+		priority: priority,
 	}
 	// if job.bind == true, set jobinstance as first argument
 	if job.bind {
@@ -67,8 +94,12 @@ func (jobInstance *jobFuncInstance) Wait() JobInstance{
 	return jobInstance
 }
 
+func (jobFuncInstance *jobFuncInstance) Priority() int {
+	return jobFuncInstance.priority
+}
+
 // Private method for calling func
-func (jobInstance *jobFuncInstance) Call() {
+func (jobInstance *jobFuncInstance) call() {
 	defer func() {
 		// error handling
 		if r := recover(); r != nil {
