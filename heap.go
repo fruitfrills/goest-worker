@@ -90,8 +90,6 @@ func (bh *jobHeap) insert(newnode *jobHeapNode) {
 	}
 }
 
-
-
 func (heap *jobHeapNode) setChild (child *jobHeapNode) {
 	insertIntoLinkedList(&heap.childHead, child)
 	child.parent = heap
@@ -139,8 +137,6 @@ func insertIntoLinkedList(head * *jobHeapNode, node *jobHeapNode) {
 		node.rightSibling = next
 	}
 }
-
-
 
 func removeFromLinkedList(head **jobHeapNode, node *jobHeapNode) {
 	leftsib := getLeftsibling(*head, node)

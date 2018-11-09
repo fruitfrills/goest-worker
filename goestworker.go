@@ -50,7 +50,7 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	backend.sendJobQueue = send
 	backend.recieveJobQueue = receive
 	backend.workerPool = make(WorkerPoolType, count)
-
+	atomic.StoreUint64(&backend.jobsCounter, 0)
 	// create workers
 	for i := 0; i < count; i++ {
 		worker := newWorker(backend.workerPool, &backend.jobsCounter)
@@ -68,44 +68,57 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 }
 
 func proccessQueue(ctx context.Context, send chan jobCall, receive chan jobCall) {
+
+	var exit = func() {
+		close(send)
+		close(receive)
+	}
+
 	go func() {
 		heap := newJobHeap()
 		for {
 			var top *jobHeapNode
 			select {
 			case <-ctx.Done():
-				close(send)
-				close(receive)
+				exit()
 				return
 			default:
 				top = heap.Top()
 			}
 
 			if top == nil {
+
+				var job jobCall
 				select {
 				case <- ctx.Done():
-					close(send)
-					close(receive)
+					exit()
 					return
-				case job := <- send:
+				case job = <- send:
+					break
+				}
+
+				// if queue empty try send job to receiver
+				select {
+				case <- ctx.Done():
+					exit()
+					return
+				case receive <- job:
+					continue
+				default:
 					heap.Insert(job)
 				}
+
 				continue
 			}
 
 			select {
 			case <- ctx.Done():
-				close(send)
-				close(receive)
+				exit()
 				return
 			case receive <- top.job:
 				heap.Remove(top)
-			case value, ok := <-send:
-				if ok {
-					heap.Insert(value)
-				} else {
-					send = nil
-				}
+			case value := <- send:
+				heap.Insert(value)
 			}
 
 		}
@@ -155,12 +168,12 @@ func (backend *pool) NewJob(taskFn interface{}) (Job) {
 }
 
 func (backend *pool) AddJobToPool(job jobCall) () {
+	atomic.AddUint64(&backend.jobsCounter, 1)
 	select {
 	case <-backend.ctx.Done():
 		return
-	default:
-		atomic.AddUint64(&backend.jobsCounter, 1)
-		backend.sendJobQueue <- job
+	case backend.sendJobQueue <- job:
+		return
 	}
 }
 
@@ -194,7 +207,6 @@ func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType)
 			select {
 
 			case job = <-jobQueue:
-
 				if job == nil {
 					return
 				}
