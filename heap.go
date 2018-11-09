@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 )
 
+
 type jobHeap struct {
 
 	// link to forest
@@ -31,7 +32,7 @@ type jobHeapNode struct {
 	rightSibling *jobHeapNode
 }
 
-func newJobHeap() *jobHeap {
+func newJobHeap() priorityQueue {
 	return &jobHeap {
 		head: nil,
 		size: 0,
@@ -93,6 +94,10 @@ func (bh *jobHeap) insert(newnode *jobHeapNode) {
 func (heap *jobHeapNode) setChild (child *jobHeapNode) {
 	insertIntoLinkedList(&heap.childHead, child)
 	child.parent = heap
+}
+
+func (heap *jobHeapNode) Job () (jobCall){
+	return heap.job
 }
 
 func (heap *jobHeapNode) removeChild() {

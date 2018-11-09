@@ -115,7 +115,7 @@ func proccessQueue(ctx context.Context, send chan jobCall, receive chan jobCall)
 			case <- ctx.Done():
 				exit()
 				return
-			case receive <- top.job:
+			case receive <- top.Job():
 				heap.Remove(top)
 			case value := <- send:
 				heap.Insert(value)

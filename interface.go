@@ -5,6 +5,8 @@ import (
 	"context"
 )
 
+type WorkerPoolType chan WorkerInterface
+
 type workerPool interface {
 
 	// getting context
@@ -25,8 +27,6 @@ type jobCall interface {
 	// calc priority
 	Priority() int
 }
-
-type WorkerPoolType chan WorkerInterface
 
 type Pool interface {
 
@@ -95,4 +95,15 @@ type WorkerInterface interface {
 
 	// Put job to worker
 	AddJob(jobCall) ()
+}
+
+type priorityQueue interface {
+
+	Insert(jobCall)
+
+	Len () (uint64)
+
+	Remove(*jobHeapNode) (*jobHeapNode)
+
+	Top() (*jobHeapNode)
 }
