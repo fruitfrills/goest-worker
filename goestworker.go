@@ -44,7 +44,7 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 
 	// make unlimited queue for jobs
 	send := make(chan jobCall, 1)
-	receive := make(chan jobCall, 1)
+	receive := make(chan jobCall, count)
 	proccessQueue(ctx, send, receive)
 
 	backend.sendJobQueue = send
