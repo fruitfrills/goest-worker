@@ -1,7 +1,13 @@
 # goest-worker
 <img align="right" width="159px" src="https://raw.githubusercontent.com/fruitfrills/goest-worker/master/goest-worker.png">
 
-Simple implementation a queue
+Package goest-worker implements a priority queue of tasks and a pool of goroutines for launching and managing the states of these tasks.
+
+## Features
+
+- Lightweight queue of jobs with concurrent processing
+- Periodic tasks (use cron expressions or time.Duration for repeating)
+- Ability to add tasks with priority to the queue
 
 ## Installation
 
@@ -55,11 +61,6 @@ func main()  {
 	pool.Stop()
 }
 ```
-
-### Features
-
-- Lightweight queue of jobs with concurrent processing
-- Periodical Jobs
 
 ### Examples
 see examples https://github.com/yobayob/goest-worker/tree/master/examples
