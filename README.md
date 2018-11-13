@@ -1,4 +1,5 @@
-## goest-worker
+# goest-worker
+<img align="right" width="159px" src="https://raw.githubusercontent.com/fruitfrills/goest-worker/master/goest-worker.png">
 
 Simple implementation a queue
 
