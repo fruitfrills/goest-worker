@@ -2,19 +2,27 @@ package goest_worker
 
 import (
 	"sync/atomic"
+	"context"
 )
 
-
-type jobHeap struct {
+type prioirityQueue struct {
 
 	// link to forest
-	head		 *jobHeapNode
+	head		*jobHeapNode
 
 	// size of heap
-	size 			uint64
+	size 		uint64
+
+	send 		chan jobCall
+
+	receive		chan jobCall
+
+	ctx 		context.Context
 }
 
 type jobHeapNode struct {
+
+	heap 		*prioirityQueue
 
 	// job for pool
 	job jobCall
@@ -32,15 +40,95 @@ type jobHeapNode struct {
 	rightSibling *jobHeapNode
 }
 
-func newJobHeap() priorityQueue {
-	return &jobHeap {
+var PriorityQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
+	queue := &prioirityQueue{
+		ctx: ctx,
 		head: nil,
 		size: 0,
+		send: make(chan jobCall),
+		receive: make(chan jobCall, capacity),
+	}
+	go queue.processor()
+	return queue
+}
+
+func (queue *prioirityQueue) Insert(job jobCall) {
+	select {
+	case <-queue.ctx.Done():
+		return
+	case queue.send <- job:
+		return
 	}
 }
 
-func newJobHeapNode(job jobCall) *jobHeapNode {
+func (queue *prioirityQueue) Pop() jobCall {
+	select {
+	case <- queue.ctx.Done():
+		return nil
+	case j := <- queue.receive:
+		return j
+	}
+}
+
+func (queue *prioirityQueue) processor() {
+
+	var exit = func() {
+		close(queue.send)
+		close(queue.receive)
+	}
+
+	go func() {
+		for {
+			var top *jobHeapNode
+			select {
+			case <-queue.ctx.Done():
+				exit()
+				return
+			default:
+				top = queue.top()
+			}
+
+			if top == nil {
+
+				var job jobCall
+				select {
+				case <-queue.ctx.Done():
+					exit()
+					return
+				case job = <-queue.send:
+					break
+				}
+
+				// if queue empty try send job to receiver
+				select {
+				case <-queue.ctx.Done():
+					exit()
+					return
+				case queue.receive <- job:
+					continue
+				default:
+					queue.insertJob(job)
+				}
+				continue
+			}
+
+			select {
+			case <-queue.ctx.Done():
+				exit()
+				return
+			case queue.receive <- top.Job():
+				top.Remove()
+			case value := <- queue.send:
+				queue.insertJob(value)
+			}
+
+		}
+	}()
+}
+
+func (jobHeap *prioirityQueue) newJobHeapNode(job jobCall) *jobHeapNode {
 	return &jobHeapNode {
+		heap: jobHeap,
 		job: job,
 		parent: nil,
 		childHead: nil,
@@ -49,15 +137,14 @@ func newJobHeapNode(job jobCall) *jobHeapNode {
 	}
 }
 
-func (bh* jobHeap) Top() *jobHeapNode {
+func (bh*prioirityQueue) top() *jobHeapNode {
 	if atomic.LoadUint64(&bh.size) == 0 {
 		return nil
 	}
-	node := getMinimumNode(bh.head)
-	return node
+	return getMinimumNode(bh.head)
 }
 
-func (bh *jobHeap) Remove(node *jobHeapNode) *jobHeapNode {
+func (bh *prioirityQueue) remove(node *jobHeapNode) *jobHeapNode {
 	removeFromLinkedList(&bh.head, node)
 
 	for _, child := range nodeIterator(node.childHead) {
@@ -68,18 +155,17 @@ func (bh *jobHeap) Remove(node *jobHeapNode) *jobHeapNode {
 	return node
 }
 
-func (bh* jobHeap) Insert(job jobCall) {
+func (bh*prioirityQueue) insertJob(job jobCall) {
 	atomic.AddUint64(&bh.size, 1)
-	newnode := newJobHeapNode(job)
+	newnode := bh.newJobHeapNode(job)
 	bh.insert(newnode)
 }
 
-func (bh* jobHeap) Len() uint64 {
+func (bh*prioirityQueue) Len() uint64 {
 	return atomic.LoadUint64(&bh.size)
 }
 
-
-func (bh *jobHeap) insert(newnode *jobHeapNode) {
+func (bh *prioirityQueue) insert(newnode *jobHeapNode) {
 	srnode := getNodeWithPriority(bh.head, newnode.priority)
 
 	if srnode == nil {
@@ -96,8 +182,12 @@ func (heap *jobHeapNode) setChild (child *jobHeapNode) {
 	child.parent = heap
 }
 
-func (heap *jobHeapNode) Job () (jobCall){
-	return heap.job
+func (node *jobHeapNode) Job() (jobCall){
+	return node.job
+}
+
+func (node *jobHeapNode) Remove() () {
+	node.heap.remove(node)
 }
 
 func (heap *jobHeapNode) removeChild() {

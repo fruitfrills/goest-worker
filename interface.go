@@ -7,6 +7,8 @@ import (
 
 type WorkerPoolType chan WorkerInterface
 
+type PoolQueue func(ctx context.Context, capacity int) Queue
+
 type workerPool interface {
 
 	// getting context
@@ -44,6 +46,9 @@ type Pool interface {
 
 	// Waiting for run all functions or <- context.Done()
 	Wait()
+
+	// use middlewares, queues and other (TODO: middleware)
+	Use(args ... interface{}) Pool
 }
 
 type Job interface {
@@ -97,13 +102,11 @@ type WorkerInterface interface {
 	AddJob(jobCall) ()
 }
 
-type priorityQueue interface {
+type Queue interface {
 
-	Insert(jobCall)
+	Pop() (jobCall)
+
+	Insert(job jobCall)
 
 	Len () (uint64)
-
-	Remove(*jobHeapNode) (*jobHeapNode)
-
-	Top() (*jobHeapNode)
 }

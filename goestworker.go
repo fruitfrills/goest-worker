@@ -11,27 +11,26 @@ import (
 
 // Pool send to queue job from client
 type pool struct {
-
 	// Inner context for worker's pool
-	ctx         context.Context
+	ctx context.Context
 
 	// Cancel context func
-	cancel      context.CancelFunc
+	cancel context.CancelFunc
 
 	// Chan for free workers
-	workerPool  chan WorkerInterface
-
-	// Chan for job
-	sendJobQueue    chan jobCall
-
-	// Chan for job
-	recieveJobQueue    chan jobCall
+	workerPool chan WorkerInterface
 
 	// Periodic jobs
 	periodicJob []PeriodicJob
 
 	// Waiting group for waiting of pool finish all jobs
 	jobsCounter uint64
+
+	// fabric for create new queue
+	prepareQueue PoolQueue
+
+	// any implematation of queue
+	queue Queue
 }
 
 // Run worker pool
@@ -42,13 +41,13 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	backend.ctx = ctx
 	backend.cancel = cancel
 
-	// make unlimited queue for jobs
-	send := make(chan jobCall, 1)
-	receive := make(chan jobCall, count)
-	proccessQueue(ctx, send, receive)
+	if backend.prepareQueue == nil {
+		backend.prepareQueue = PriorityQueue
+	}
 
-	backend.sendJobQueue = send
-	backend.recieveJobQueue = receive
+	backend.queue = backend.prepareQueue(ctx, count)
+
+
 	backend.workerPool = make(WorkerPoolType, count)
 	atomic.StoreUint64(&backend.jobsCounter, 0)
 	// create workers
@@ -58,79 +57,22 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	}
 
 	// run processor
-	proccessor(ctx, backend.recieveJobQueue, backend.workerPool)
+	proccessor(ctx, backend.queue, backend.workerPool)
 
 	// run periodic processor
 	if len(backend.periodicJob) != 0 {
 		periodicProcessor(ctx, backend.periodicJob)
 	}
+
 	return backend
-}
-
-func proccessQueue(ctx context.Context, send chan jobCall, receive chan jobCall) {
-
-	var exit = func() {
-		close(send)
-		close(receive)
-	}
-
-	go func() {
-		heap := newJobHeap()
-		for {
-			var top *jobHeapNode
-			select {
-			case <-ctx.Done():
-				exit()
-				return
-			default:
-				top = heap.Top()
-			}
-
-			if top == nil {
-
-				var job jobCall
-				select {
-				case <- ctx.Done():
-					exit()
-					return
-				case job = <- send:
-					break
-				}
-
-				// if queue empty try send job to receiver
-				select {
-				case <- ctx.Done():
-					exit()
-					return
-				case receive <- job:
-					continue
-				default:
-					heap.Insert(job)
-				}
-
-				continue
-			}
-
-			select {
-			case <- ctx.Done():
-				exit()
-				return
-			case receive <- top.Job():
-				heap.Remove(top)
-			case value := <- send:
-				heap.Insert(value)
-			}
-
-		}
-	}()
 }
 
 func (backend *pool) wait(ctx context.Context, counter *uint64) {
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
-		case <- time.After(time.Millisecond):
+		case <-time.After(time.Millisecond):
 			if atomic.LoadUint64(counter) == 0 {
 				return
 			}
@@ -148,7 +90,6 @@ func (backend *pool) Stop() {
 	backend.cancel()
 	close(backend.workerPool)
 }
-
 
 // Create simple jobs
 func (backend *pool) NewJob(taskFn interface{}) (Job) {
@@ -169,12 +110,17 @@ func (backend *pool) NewJob(taskFn interface{}) (Job) {
 
 func (backend *pool) AddJobToPool(job jobCall) () {
 	atomic.AddUint64(&backend.jobsCounter, 1)
-	select {
-	case <-backend.ctx.Done():
-		return
-	case backend.sendJobQueue <- job:
-		return
+	backend.queue.Insert(job)
+}
+
+func (backend *pool) Use(args ... interface{}) Pool {
+	for _, arg := range args {
+		switch arg.(type) {
+		case PoolQueue:
+			backend.prepareQueue = arg.(PoolQueue)
+		}
 	}
+	return backend
 }
 
 func (backend *pool) AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error) {
@@ -196,29 +142,29 @@ func (backend *pool) Context() context.Context {
 	return backend.ctx
 }
 
+func (backend *pool) SetQueue(f func(ctx context.Context, capacity int) Queue) {
+	backend.prepareQueue = f
+}
+
 func New() Pool {
 	return &pool{}
 }
 
-func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType) {
+
+func proccessor(ctx context.Context, queue Queue, pool WorkerPoolType) {
 	go func() {
 		for {
-			var job jobCall
-			select {
+			job := queue.Pop()
 
-			case job = <-jobQueue:
-				if job == nil {
-					return
-				}
-				break
-			case <-ctx.Done():
+			// if job is nil, then the context is closed
+			if job == nil {
 				return
 			}
 
 			select {
 			case <-ctx.Done():
 				return
-			case worker := <-pool:
+			case worker := <- pool:
 				worker.AddJob(job)
 			}
 		}

@@ -38,8 +38,9 @@ func DownloadFile(uri, fp string) error {
 	return nil
 }
 
+
 func main()  {
-	pool := goest_worker.New().Start(context.TODO(), 8)
+	pool := goest_worker.New().Use(goest_worker.ChannelQueue).Start(context.TODO(), 8)
 	defer pool.Stop()
 
 	downloadJob := pool.NewJob(DownloadFile)
