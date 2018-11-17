@@ -13,8 +13,6 @@ const (
 )
 
 type cronPeriodicJob struct {
-	PeriodicJob
-
 	sync.Mutex
 	state int32
 	job   Job
@@ -72,7 +70,6 @@ func NewCronJob (job Job, expr string, arguments ... interface{}) (PeriodicJob) 
 }
 
 type timeDurationPeriodicJob struct {
-	PeriodicJob
 
 	sync.Mutex
 	state    int32

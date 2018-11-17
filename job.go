@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"context"
 	"errors"
-	"fmt"
 )
 
 // jobFunc is the wrapper around any function which can be execute in pool
