@@ -7,20 +7,26 @@ import (
 
 type WorkerPoolType chan WorkerInterface
 
-type workerPool interface {
+// Factory for creating new queues
+type PoolQueue func(ctx context.Context, capacity int) Queue
 
+// Facory for creating new counters
+type CounterMiddleware func() Counter
+
+// inner interface
+type workerPool interface {
 	// getting context
 	Context() context.Context
 
 	// run job to pool
-	AddJobToPool(jobCall) ()
+	Insert(jobCall) ()
 
 	// create periodic job
-	AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error)
+	InsertPeriodic(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error)
 }
 
+// inner interface
 type jobCall interface {
-
 	// private method for calling jobs
 	call()
 
@@ -29,7 +35,6 @@ type jobCall interface {
 }
 
 type Pool interface {
-
 	// Start pool
 	Start(ctx context.Context, count int) Pool
 
@@ -44,10 +49,12 @@ type Pool interface {
 
 	// Waiting for run all functions or <- context.Done()
 	Wait()
+
+	// use middlewares, queues and other (TODO: middleware)
+	Use(args ... interface{}) Pool
 }
 
 type Job interface {
-
 	// Set the first argument to current JobInstance
 	Bind(val bool) Job
 
@@ -64,7 +71,6 @@ type Job interface {
 }
 
 type JobInstance interface {
-
 	// Get context
 	Context() context.Context
 
@@ -78,9 +84,7 @@ type JobInstance interface {
 	Wait() JobInstance
 }
 
-
 type PeriodicJob interface {
-
 	// get next time to running
 	Next(time.Time) time.Time
 
@@ -89,7 +93,6 @@ type PeriodicJob interface {
 }
 
 type WorkerInterface interface {
-
 	// Start worker
 	Start(ctx context.Context)
 
@@ -97,13 +100,27 @@ type WorkerInterface interface {
 	AddJob(jobCall) ()
 }
 
-type priorityQueue interface {
+type Queue interface {
+	// get job
+	Pop() (jobCall)
 
-	Insert(jobCall)
+	// Insert job
+	Insert(job jobCall)
 
-	Len () (uint64)
+	// size of queue
+	Len() (uint64)
+}
 
-	Remove(*jobHeapNode) (*jobHeapNode)
+type Counter interface {
+	// ++i
+	Increment()
 
-	Top() (*jobHeapNode)
+	// --i
+	Decrement()
+
+	// Waiting for counter will be equals to zero or context is closed
+	Wait(context.Context)
+
+	// Get counter value
+	Len() uint64
 }

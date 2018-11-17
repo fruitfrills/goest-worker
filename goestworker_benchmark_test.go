@@ -81,7 +81,8 @@ func BenchmarkPoolGoroutine1000(b *testing.B)  {
 }
 
 func BenchmarkPool10(b *testing.B) {
-	pool := New().Start(context.TODO(), 10)
+	pool := New().Use(AtomicCounter).Start(context.TODO(), 10)
+
 	defer pool.Stop()
 	job := pool.NewJob(demoFunc)
 	b.StartTimer()
@@ -93,7 +94,23 @@ func BenchmarkPool10(b *testing.B) {
 }
 
 func BenchmarkPool1000(b *testing.B) {
-	pool := New().Start(context.TODO(), 1000)
+	pool := New().Use(AtomicCounter).Start(context.TODO(), 1000)
+	defer pool.Stop()
+	job := pool.NewJob(demoFunc)
+	b.StartTimer()
+	for i := 0; i < testsCountOfTasks; i ++ {
+		job.Run()
+	}
+	pool.Wait()
+	b.StopTimer()
+}
+
+func BenchmarkPoolChannelQueue1000(b *testing.B) {
+
+	pool := New().Use(
+		ChannelQueue, AtomicCounter,
+	).Start(context.TODO(), 1000)
+
 	defer pool.Stop()
 	job := pool.NewJob(demoFunc)
 	b.StartTimer()

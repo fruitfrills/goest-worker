@@ -45,12 +45,8 @@ func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
 		in = append([]reflect.Value{reflect.ValueOf(instance)}, in[0:len(in)-1]...)
 	}
 	instance.args = in
-	job.pool.AddJobToPool(instance)
+	job.pool.Insert(instance)
 	return instance
-}
-
-func (job *jobFuncInstance) debug() {
-	fmt.Println("RUNNING", job.args[0].Interface().(string))
 }
 
 func (job *jobFunc) RunWithPriority(priority int, arguments ... interface{}) (JobInstance) {
@@ -70,13 +66,13 @@ func (job *jobFunc) RunWithPriority(priority int, arguments ... interface{}) (Jo
 		in = append([]reflect.Value{reflect.ValueOf(instance)}, in[0:len(in)-1]...)
 	}
 	instance.args = in
-	job.pool.AddJobToPool(instance)
+	job.pool.Insert(instance)
 	return instance
 }
 
 // run task every. arg may be string (cron like), time.Duration and time.time
 func (job *jobFunc) RunEvery(period interface{}, arguments ... interface{}) (PeriodicJob, error) {
-	return job.pool.AddPeriodicJob(job, period, arguments ...)
+	return job.pool.InsertPeriodic(job, period, arguments ...)
 }
 
 func (job *jobFunc) Bind(val bool) Job{

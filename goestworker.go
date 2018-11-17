@@ -6,32 +6,33 @@ import (
 	"sort"
 	"reflect"
 	"errors"
-	"sync/atomic"
 )
 
 // Pool send to queue job from client
 type pool struct {
-
 	// Inner context for worker's pool
-	ctx         context.Context
+	ctx context.Context
 
 	// Cancel context func
-	cancel      context.CancelFunc
+	cancel context.CancelFunc
 
 	// Chan for free workers
-	workerPool  chan WorkerInterface
-
-	// Chan for job
-	sendJobQueue    chan jobCall
-
-	// Chan for job
-	recieveJobQueue    chan jobCall
+	workerPool chan WorkerInterface
 
 	// Periodic jobs
 	periodicJob []PeriodicJob
 
-	// Waiting group for waiting of pool finish all jobs
-	jobsCounter uint64
+	// fabric for create new queue
+	prepareQueue PoolQueue
+
+	// any implematation of queue
+	queue Queue
+
+	// fabric for create new counter
+	prepareCounter CounterMiddleware
+
+	// For waiting of pool finish all jobs
+	counter Counter
 }
 
 // Run worker pool
@@ -42,105 +43,43 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	backend.ctx = ctx
 	backend.cancel = cancel
 
-	// make unlimited queue for jobs
-	send := make(chan jobCall, 1)
-	receive := make(chan jobCall, count)
-	proccessQueue(ctx, send, receive)
+	// Set default queue
+	if backend.prepareQueue == nil {
+		backend.prepareQueue = PriorityQueue
+	}
 
-	backend.sendJobQueue = send
-	backend.recieveJobQueue = receive
+	//
+	if backend.prepareCounter != nil {
+		backend.counter = backend.prepareCounter()
+	}
+
+	// create empty queue
+	backend.queue = backend.prepareQueue(ctx, count)
+
+	// create worker pool
 	backend.workerPool = make(WorkerPoolType, count)
-	atomic.StoreUint64(&backend.jobsCounter, 0)
 	// create workers
 	for i := 0; i < count; i++ {
-		worker := newWorker(backend.workerPool, &backend.jobsCounter)
+		worker := newWorker(backend.workerPool, backend.counter)
 		worker.Start(ctx)
 	}
 
 	// run processor
-	proccessor(ctx, backend.recieveJobQueue, backend.workerPool)
+	proccessor(ctx, backend.queue, backend.workerPool)
 
 	// run periodic processor
 	if len(backend.periodicJob) != 0 {
 		periodicProcessor(ctx, backend.periodicJob)
 	}
+
 	return backend
 }
 
-func proccessQueue(ctx context.Context, send chan jobCall, receive chan jobCall) {
-
-	var exit = func() {
-		close(send)
-		close(receive)
-	}
-
-	go func() {
-		heap := newJobHeap()
-		for {
-			var top *jobHeapNode
-			select {
-			case <-ctx.Done():
-				exit()
-				return
-			default:
-				top = heap.Top()
-			}
-
-			if top == nil {
-
-				var job jobCall
-				select {
-				case <- ctx.Done():
-					exit()
-					return
-				case job = <- send:
-					break
-				}
-
-				// if queue empty try send job to receiver
-				select {
-				case <- ctx.Done():
-					exit()
-					return
-				case receive <- job:
-					continue
-				default:
-					heap.Insert(job)
-				}
-
-				continue
-			}
-
-			select {
-			case <- ctx.Done():
-				exit()
-				return
-			case receive <- top.Job():
-				heap.Remove(top)
-			case value := <- send:
-				heap.Insert(value)
-			}
-
-		}
-	}()
-}
-
-func (backend *pool) wait(ctx context.Context, counter *uint64) {
-	for {
-		select {
-		case <- ctx.Done():
-			return
-		case <- time.After(time.Millisecond):
-			if atomic.LoadUint64(counter) == 0 {
-				return
-			}
-		}
-	}
-	return
-}
-
 func (backend *pool) Wait() {
-	backend.wait(backend.ctx, &backend.jobsCounter)
+	if backend.counter ==  nil {
+		return
+	}
+	backend.counter.Wait(backend.ctx)
 }
 
 // Worker pool stop
@@ -148,7 +87,6 @@ func (backend *pool) Stop() {
 	backend.cancel()
 	close(backend.workerPool)
 }
-
 
 // Create simple jobs
 func (backend *pool) NewJob(taskFn interface{}) (Job) {
@@ -167,17 +105,27 @@ func (backend *pool) NewJob(taskFn interface{}) (Job) {
 	}
 }
 
-func (backend *pool) AddJobToPool(job jobCall) () {
-	atomic.AddUint64(&backend.jobsCounter, 1)
-	select {
-	case <-backend.ctx.Done():
-		return
-	case backend.sendJobQueue <- job:
-		return
+func (backend *pool) Insert(job jobCall) () {
+	if backend.counter != nil {
+		backend.counter.Increment()
 	}
+	backend.queue.Insert(job)
 }
 
-func (backend *pool) AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error) {
+// apply factory to create queue, middlewares and others
+func (backend *pool) Use(args ... interface{}) Pool {
+	for _, arg := range args {
+		switch arg.(type) {
+		case CounterMiddleware:
+			backend.prepareCounter = arg.(CounterMiddleware)
+		case PoolQueue:
+			backend.prepareQueue = arg.(PoolQueue)
+		}
+	}
+	return backend
+}
+
+func (backend *pool) InsertPeriodic(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error) {
 	var pJob PeriodicJob
 	switch period.(type) {
 	case time.Duration:
@@ -196,29 +144,36 @@ func (backend *pool) Context() context.Context {
 	return backend.ctx
 }
 
+func (backend *pool) SetQueue(f func(ctx context.Context, capacity int) Queue) {
+	backend.prepareQueue = f
+}
+
 func New() Pool {
 	return &pool{}
 }
 
-func proccessor(ctx context.Context, jobQueue chan jobCall, pool WorkerPoolType) {
+
+func proccessor(ctx context.Context, queue Queue, pool WorkerPoolType) {
 	go func() {
 		for {
 			var job jobCall
-			select {
 
-			case job = <-jobQueue:
-				if job == nil {
-					return
-				}
-				break
+			select {
 			case <-ctx.Done():
-				return
+				continue
+			default:
+				job = queue.Pop()
+			}
+
+			// if job is nil, then the context is closed
+			if job == nil {
+				continue
 			}
 
 			select {
 			case <-ctx.Done():
 				return
-			case worker := <-pool:
+			case worker := <- pool:
 				worker.AddJob(job)
 			}
 		}
