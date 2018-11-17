@@ -2,6 +2,8 @@ package goest_worker
 
 import "context"
 
+// This is not a real queue with limited capacity and without support priority.
+// If the queue is full, the process will wait before adding the task.
 var ChannelQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
 	queue := &channelQueue{
 		ctx: ctx,
@@ -25,7 +27,6 @@ func (c *channelQueue) Pop () (jobCall) {
 }
 
 func (c *channelQueue) Insert (job jobCall) () {
-
 	select {
 	case c.ch <- job:
 		return

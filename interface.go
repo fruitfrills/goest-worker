@@ -7,22 +7,26 @@ import (
 
 type WorkerPoolType chan WorkerInterface
 
+// Factory for creating new queues
 type PoolQueue func(ctx context.Context, capacity int) Queue
 
-type workerPool interface {
+// Facory for creating new counters
+type CounterMiddleware func() Counter
 
+// inner interface
+type workerPool interface {
 	// getting context
 	Context() context.Context
 
 	// run job to pool
-	AddJobToPool(jobCall) ()
+	Insert(jobCall) ()
 
 	// create periodic job
-	AddPeriodicJob(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error)
+	InsertPeriodic(job Job, period interface{}, arguments ... interface{}) (PeriodicJob, error)
 }
 
+// inner interface
 type jobCall interface {
-
 	// private method for calling jobs
 	call()
 
@@ -31,7 +35,6 @@ type jobCall interface {
 }
 
 type Pool interface {
-
 	// Start pool
 	Start(ctx context.Context, count int) Pool
 
@@ -52,7 +55,6 @@ type Pool interface {
 }
 
 type Job interface {
-
 	// Set the first argument to current JobInstance
 	Bind(val bool) Job
 
@@ -69,7 +71,6 @@ type Job interface {
 }
 
 type JobInstance interface {
-
 	// Get context
 	Context() context.Context
 
@@ -83,9 +84,7 @@ type JobInstance interface {
 	Wait() JobInstance
 }
 
-
 type PeriodicJob interface {
-
 	// get next time to running
 	Next(time.Time) time.Time
 
@@ -94,7 +93,6 @@ type PeriodicJob interface {
 }
 
 type WorkerInterface interface {
-
 	// Start worker
 	Start(ctx context.Context)
 
@@ -103,10 +101,26 @@ type WorkerInterface interface {
 }
 
 type Queue interface {
-
+	// get job
 	Pop() (jobCall)
 
+	// Insert job
 	Insert(job jobCall)
 
-	Len () (uint64)
+	// size of queue
+	Len() (uint64)
+}
+
+type Counter interface {
+	// ++i
+	Increment()
+
+	// --i
+	Decrement()
+
+	// Waiting for counter will be equals to zero or context is closed
+	Wait(context.Context)
+
+	// Get counter value
+	Len() uint64
 }

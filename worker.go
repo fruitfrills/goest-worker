@@ -2,7 +2,6 @@ package goest_worker
 
 import (
 	"context"
-	"sync/atomic"
 )
 
 type worker struct {
@@ -14,10 +13,10 @@ type worker struct {
 	pool				WorkerPoolType
 
 	// counter from pool for decrement waiting tasks
-	counter 					*uint64
+	counter 			Counter
 }
 
-func newWorker(workerPool WorkerPoolType, counter *uint64) (WorkerInterface)  {
+func newWorker(workerPool WorkerPoolType, counter Counter) (WorkerInterface)  {
 	return &worker{
 		task: make(chan jobCall),
 		pool: workerPool,
@@ -43,7 +42,9 @@ func (w *worker) Start(ctx context.Context) {
 					return
 				}
 				job.call()
-				atomic.AddUint64(w.counter, ^uint64(0))
+				if w.counter != nil {
+					w.counter.Decrement()
+				}
 			}
 		}
 	}()
