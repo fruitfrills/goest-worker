@@ -214,7 +214,6 @@ func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
 					case <-ctx.Done():
 						return
 					}
-
 				}
 
 				// sort queue by time
