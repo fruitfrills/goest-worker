@@ -29,5 +29,5 @@
 // This will stop pool
 //
 // For more details, see the documentation for the types and methods.
-
+//
 package goest_worker
