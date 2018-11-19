@@ -39,16 +39,14 @@ type pool struct {
 func (backend *pool) Start(ctx context.Context, count int) Pool {
 
 	// create new context
-	ctx, cancel := context.WithCancel(ctx)
-	backend.ctx = ctx
-	backend.cancel = cancel
+	backend.ctx, backend.cancel = context.WithCancel(ctx)
 
 	// Set default queue
 	if backend.prepareQueue == nil {
 		backend.prepareQueue = PriorityQueue
 	}
 
-	//
+	// set counter if needed
 	if backend.prepareCounter != nil {
 		backend.counter = backend.prepareCounter()
 	}

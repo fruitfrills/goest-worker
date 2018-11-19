@@ -208,7 +208,7 @@ func linkNodes(n1 *jobHeapNode, n2 *jobHeapNode) *jobHeapNode {
 	}
 }
 
-func insertIntoLinkedList(head * *jobHeapNode, node *jobHeapNode) {
+func insertIntoLinkedList(head **jobHeapNode, node *jobHeapNode) {
 	var prev *jobHeapNode
 	var next *jobHeapNode
 
