@@ -10,7 +10,7 @@ import (
 
 // Pool send to queue job from client
 type pool struct {
-	// Inner context for worker's pool
+	// inner context for worker's pool
 	ctx context.Context
 
 	// Cancel context func
@@ -22,16 +22,16 @@ type pool struct {
 	// Periodic jobs
 	periodicJob []PeriodicJob
 
-	// fabric for create new queue
+	// factory for create new queue
 	prepareQueue PoolQueue
 
 	// any implematation of queue
 	queue Queue
 
-	// fabric for create new counter
+	// factory for create new counter
 	prepareCounter CounterMiddleware
 
-	// For waiting of pool finish all jobs
+	// active job counter
 	counter Counter
 }
 
@@ -41,7 +41,7 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	// create new context
 	backend.ctx, backend.cancel = context.WithCancel(ctx)
 
-	// Set default queue
+	// set default queue
 	if backend.prepareQueue == nil {
 		backend.prepareQueue = PriorityQueue
 	}
