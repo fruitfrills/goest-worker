@@ -16,7 +16,7 @@ func sum(a, b int) (int) {
 	return res
 }
 
-func diff(a, b int) (int) {
+func div(a, b int) (int) {
 	res := a / b
 	fmt.Printf("%d / %d\n", a, b)
 	return res
@@ -30,8 +30,8 @@ func main()  {
 		panic(err)
 	}
 	fmt.Println("result is", results[0].(int))
-	diffJob := pool.NewJob(diff)
-	results, err = diffJob.Run( 144, 12).Wait().Result()
+	divJob := pool.NewJob(div)
+	results, err = divJob.Run( 144, 12).Wait().Result()
 	if err != nil {
 		panic(err)
 	}
