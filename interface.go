@@ -10,7 +10,7 @@ type WorkerPoolType chan WorkerInterface
 // Factory for creating new queues
 type PoolQueue func(ctx context.Context, capacity int) Queue
 
-// Facory for creating new counters
+// Factory for creating new counters
 type CounterMiddleware func() Counter
 
 // inner interface
@@ -52,6 +52,9 @@ type Pool interface {
 
 	// use middlewares, queues and other (TODO: middleware)
 	Use(args ... interface{}) Pool
+
+	// change the numbers of workers
+	Resize(count int) Pool
 }
 
 type Job interface {
@@ -94,10 +97,16 @@ type PeriodicJob interface {
 
 type WorkerInterface interface {
 	// Start worker
-	Start(ctx context.Context)
+	Start()
 
 	// Put job to worker
 	AddJob(jobCall) ()
+
+	// Get context
+	Context() (ctx context.Context)
+
+	// Close worker
+	Cancel()
 }
 
 type Queue interface {
@@ -109,8 +118,13 @@ type Queue interface {
 
 	// size of queue
 	Len() (uint64)
+
+	// change capacity
+	SetCapacity(ctx context.Context, capacity int)
 }
 
+// The counter is used to count the tasks in the pool.
+// Used to wait for all tasks to complete.
 type Counter interface {
 	// ++i
 	Increment()

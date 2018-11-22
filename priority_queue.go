@@ -18,6 +18,8 @@ type prioirityQueue struct {
 	receive		chan jobCall
 
 	ctx 		context.Context
+
+	cancel		context.CancelFunc
 }
 
 type jobHeapNode struct {
@@ -41,14 +43,16 @@ type jobHeapNode struct {
 }
 
 var PriorityQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
+	ctx, cancel := context.WithCancel(ctx)
 	queue := &prioirityQueue{
 		ctx: ctx,
+		cancel: cancel,
 		head: nil,
 		size: 0,
 		send: make(chan jobCall),
 		receive: make(chan jobCall, capacity),
 	}
-	go queue.processor()
+	go queue.processor(ctx, queue.send, queue.receive)
 	return queue
 }
 
@@ -61,6 +65,16 @@ func (queue *prioirityQueue) Insert(job jobCall) {
 	}
 }
 
+// For the priority queue, the capacity is the size
+// of the input channel after which the heap will begin to fill.
+func (queue *prioirityQueue) SetCapacity(ctx context.Context, capacity int) {
+	queue.cancel()
+	queue.ctx, queue.cancel = context.WithCancel(ctx)
+	queue.send = make(chan jobCall)
+	queue.receive = make(chan jobCall, capacity)
+	go queue.processor(queue.ctx, queue.send, queue.receive)
+}
+
 func (queue *prioirityQueue) Pop() jobCall {
 	select {
 	case <- queue.ctx.Done():
@@ -70,18 +84,18 @@ func (queue *prioirityQueue) Pop() jobCall {
 	}
 }
 
-func (queue *prioirityQueue) processor() {
+func (queue *prioirityQueue) processor(ctx context.Context, send chan jobCall, receive chan jobCall) {
 
 	var exit = func() {
-		close(queue.send)
-		close(queue.receive)
+		close(send)
+		close(receive)
 	}
 
 	go func() {
 		for {
 			var top *jobHeapNode
 			select {
-			case <-queue.ctx.Done():
+			case <-ctx.Done():
 				exit()
 				return
 			default:
@@ -92,19 +106,19 @@ func (queue *prioirityQueue) processor() {
 
 				var job jobCall
 				select {
-				case <-queue.ctx.Done():
+				case <-ctx.Done():
 					exit()
 					return
-				case job = <-queue.send:
+				case job = <- send:
 					break
 				}
 
 				// if queue empty try send job to receiver
 				select {
-				case <-queue.ctx.Done():
+				case <-ctx.Done():
 					exit()
 					return
-				case queue.receive <- job:
+				case receive <- job:
 					continue
 				default:
 					queue.insertJob(job)
@@ -113,12 +127,12 @@ func (queue *prioirityQueue) processor() {
 			}
 
 			select {
-			case <-queue.ctx.Done():
+			case <-ctx.Done():
 				exit()
 				return
-			case queue.receive <- top.Job():
+			case receive <- top.Job():
 				top.Remove()
-			case value := <- queue.send:
+			case value := <- send:
 				queue.insertJob(value)
 			}
 

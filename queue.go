@@ -5,7 +5,9 @@ import "context"
 // This is not a real queue with limited capacity and without support priority.
 // If the queue is full, the process will wait before adding the task.
 var ChannelQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
+	ctx, cancel := context.WithCancel(ctx)
 	queue := &channelQueue{
+		cancel: cancel,
 		ctx: ctx,
 		ch: make(chan jobCall, capacity),
 	}
@@ -14,7 +16,14 @@ var ChannelQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
 
 type channelQueue struct {
 	ctx context.Context
+	cancel context.CancelFunc
 	ch chan jobCall
+}
+
+func (c *channelQueue) SetCapacity(ctx context.Context, capacity int) {
+	c.cancel()
+	c.ctx, c.cancel = context.WithCancel(ctx)
+	c.ch = make(chan jobCall, capacity)
 }
 
 func (c *channelQueue) Pop () (jobCall) {

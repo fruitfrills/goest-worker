@@ -79,6 +79,7 @@ func (job *jobFunc) Bind(val bool) Job{
 	return job
 }
 
+// TODO: implement this!
 func (job *jobFunc) SetMaxRetry(val int) Job{
 	job.maxRetry = val
 	return job

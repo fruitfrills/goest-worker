@@ -2,9 +2,11 @@
 //
 // Quick start
 //
-//      pool := worker.New().Start(context.TODO(), runtime.NumCPU())
+// Start pool with one or more workers
 //
-// This will start pool with one or more workers
+//     pool := worker.New().Start(context.TODO(), runtime.NumCPU())
+//
+// Create job for pool
 //
 //     sum := pool.NewJob(func (a, b int) (int) {
 //         res := a / b
@@ -12,21 +14,19 @@
 //         return res
 //     })
 //
-// This will create job for pool
+// Run current job
 //
 //     j := sum.Run(2, 2)
 //
-// This will run current job
+// Getting the result
 //
 //     j.Wait()
 //     results, err := j.Result()
 //     fmt.PrintLn(results[0].(int)) // print 4
 //
-// So you can get the result
+// Stop pool
 //
 //     pool.Stop()
-//
-// This will stop pool
 //
 // For more details, see the documentation for the types and methods.
 //

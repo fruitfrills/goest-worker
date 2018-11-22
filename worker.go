@@ -14,28 +14,37 @@ type worker struct {
 
 	// counter from pool for decrement waiting tasks
 	counter 			Counter
+
+	// worker context
+	ctx 				context.Context
+
+	// cancel context
+	cancel				context.CancelFunc
 }
 
-func newWorker(workerPool WorkerPoolType, counter Counter) (WorkerInterface)  {
+func newWorker(ctx context.Context, workerPool WorkerPoolType, counter Counter) (WorkerInterface)  {
+	ctx, cancel := context.WithCancel(ctx)
 	return &worker{
+		ctx: ctx,
+		cancel: cancel,
 		task: make(chan jobCall),
 		pool: workerPool,
 		counter: counter,
 	}
 }
 
-func (w *worker) Start(ctx context.Context) {
+func (w *worker) Start() {
 	go func() {
 		for {
 			select {
-			case <- ctx.Done():
+			case <- w.ctx.Done():
 				return
-			default:
-				w.pool <- w
+			case w.pool <- w:
+				break
 			}
 
 			select {
-			case <- ctx.Done():
+			case <- w.ctx.Done():
 				return
 			case job := <- w.task:
 				if job == nil {
@@ -48,6 +57,14 @@ func (w *worker) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (w *worker) Context() context.Context  {
+	return w.ctx
+}
+
+func (w *worker) Cancel()  {
+	w.cancel()
 }
 
 func (w *worker) AddJob(job jobCall) {

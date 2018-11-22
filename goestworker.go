@@ -10,6 +10,7 @@ import (
 
 // Pool send to queue job from client
 type pool struct {
+
 	// inner context for worker's pool
 	ctx context.Context
 
@@ -33,10 +34,15 @@ type pool struct {
 
 	// active job counter
 	counter Counter
+
+	// active workers
+	workers []WorkerInterface
+
 }
 
 // Run worker pool
 func (backend *pool) Start(ctx context.Context, count int) Pool {
+
 
 	// create new context
 	backend.ctx, backend.cancel = context.WithCancel(ctx)
@@ -58,18 +64,44 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	backend.workerPool = make(WorkerPoolType, count)
 	// create workers
 	for i := 0; i < count; i++ {
-		worker := newWorker(backend.workerPool, backend.counter)
-		worker.Start(ctx)
+		worker := newWorker(ctx, backend.workerPool, backend.counter)
+		backend.workers = append(backend.workers, worker)
+		worker.Start()
 	}
 
 	// run processor
-	proccessor(ctx, backend.queue, backend.workerPool)
+	processor(ctx, backend.queue, backend.workerPool)
 
 	// run periodic processor
 	if len(backend.periodicJob) != 0 {
 		periodicProcessor(ctx, backend.periodicJob)
 	}
 
+	return backend
+}
+
+func (backend *pool) Resize(count int) Pool {
+	if len(backend.workers) == count {
+		return backend
+	}
+	// Reducing the number of workers
+	if len(backend.workers) > count {
+		for i := len(backend.workers); i > count; i-- {
+			var worker WorkerInterface
+			worker, backend.workers = backend.workers[0], backend.workers[1:]
+			worker.Cancel()
+		}
+
+		return backend
+	} else {
+		// Increasing the number of workers
+		for i := len(backend.workers);  i < count; i++ {
+			worker := newWorker(backend.ctx, backend.workerPool, backend.counter)
+			worker.Start()
+			backend.workers = append(backend.workers, worker)
+		}
+	}
+	backend.queue.SetCapacity(backend.ctx, count)
 	return backend
 }
 
@@ -82,6 +114,7 @@ func (backend *pool) Wait() {
 
 // Worker pool stop
 func (backend *pool) Stop() {
+	backend.workers = []WorkerInterface{}
 	backend.cancel()
 	close(backend.workerPool)
 }
@@ -142,16 +175,11 @@ func (backend *pool) Context() context.Context {
 	return backend.ctx
 }
 
-func (backend *pool) SetQueue(f func(ctx context.Context, capacity int) Queue) {
-	backend.prepareQueue = f
-}
-
 func New() Pool {
 	return &pool{}
 }
 
-
-func proccessor(ctx context.Context, queue Queue, pool WorkerPoolType) {
+func processor(ctx context.Context, queue Queue, pool WorkerPoolType) {
 	go func() {
 		for {
 			var job jobCall
