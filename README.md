@@ -64,3 +64,7 @@ func main()  {
 
 ### Examples
 see examples https://github.com/yobayob/goest-worker/tree/master/examples
+
+
+### Documentation
+godoc - https://godoc.org/github.com/fruitfrills/goest-worker
