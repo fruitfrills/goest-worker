@@ -10,7 +10,7 @@ type worker struct {
 	task 				chan jobCall
 
 	// Chan for send free message
-	pool				WorkerPoolType
+	pool workerPoolType
 
 	// counter from pool for decrement waiting tasks
 	counter 			Counter
@@ -22,7 +22,7 @@ type worker struct {
 	cancel				context.CancelFunc
 }
 
-func newWorker(ctx context.Context, workerPool WorkerPoolType, counter Counter) (WorkerInterface)  {
+func newWorker(ctx context.Context, workerPool workerPoolType, counter Counter) (iWorker)  {
 	ctx, cancel := context.WithCancel(ctx)
 	return &worker{
 		ctx: ctx,

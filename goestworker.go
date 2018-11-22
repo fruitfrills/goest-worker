@@ -18,7 +18,7 @@ type pool struct {
 	cancel context.CancelFunc
 
 	// Chan for free workers
-	workerPool chan WorkerInterface
+	workerPool chan iWorker
 
 	// Periodic jobs
 	periodicJob []PeriodicJob
@@ -36,7 +36,7 @@ type pool struct {
 	counter Counter
 
 	// active workers
-	workers []WorkerInterface
+	workers []iWorker
 
 }
 
@@ -61,7 +61,7 @@ func (backend *pool) Start(ctx context.Context, count int) Pool {
 	backend.queue = backend.prepareQueue(ctx, count)
 
 	// create worker pool
-	backend.workerPool = make(WorkerPoolType, count)
+	backend.workerPool = make(workerPoolType, count)
 	// create workers
 	for i := 0; i < count; i++ {
 		worker := newWorker(ctx, backend.workerPool, backend.counter)
@@ -87,7 +87,7 @@ func (backend *pool) Resize(count int) Pool {
 	// Reducing the number of workers
 	if len(backend.workers) > count {
 		for i := len(backend.workers); i > count; i-- {
-			var worker WorkerInterface
+			var worker iWorker
 			worker, backend.workers = backend.workers[0], backend.workers[1:]
 			worker.Cancel()
 		}
@@ -112,9 +112,9 @@ func (backend *pool) Wait() {
 	backend.counter.Wait(backend.ctx)
 }
 
-// Worker pool stop
+// iWorker pool stop
 func (backend *pool) Stop() {
-	backend.workers = []WorkerInterface{}
+	backend.workers = []iWorker{}
 	backend.cancel()
 	close(backend.workerPool)
 }
@@ -179,7 +179,7 @@ func New() Pool {
 	return &pool{}
 }
 
-func processor(ctx context.Context, queue Queue, pool WorkerPoolType) {
+func processor(ctx context.Context, queue Queue, pool workerPoolType) {
 	go func() {
 		for {
 			var job jobCall
@@ -216,7 +216,7 @@ func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
 				return
 			default:
 				maxInterval := lastCall.Add(time.Minute)
-				queue := []NextJob{}
+				queue := []nextJob{}
 			JOB_LOOP:
 				for _, job := range periodicJobs {
 					next := time.Now()
@@ -228,7 +228,7 @@ func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
 						}
 
 						// add job to queue
-						queue = append(queue, NextJob{
+						queue = append(queue, nextJob{
 							Job:  job,
 							Next: next,
 						})
@@ -245,7 +245,7 @@ func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
 				}
 
 				// sort queue by time
-				sort.Sort(NextJobSorter(queue))
+				sort.Sort(nextJobSorter(queue))
 
 				for _, pJob := range queue {
 					select {

@@ -42,6 +42,8 @@ type jobHeapNode struct {
 	rightSibling *jobHeapNode
 }
 
+// This is a factory for creating priority queue
+// This implementation use the form of a binomial heap
 var PriorityQueue PoolQueue = func (ctx context.Context, capacity int) Queue {
 	ctx, cancel := context.WithCancel(ctx)
 	queue := &prioirityQueue{

@@ -5,7 +5,8 @@ import (
 	"context"
 )
 
-type WorkerPoolType chan WorkerInterface
+// Channel for free workers
+type workerPoolType chan iWorker
 
 // Factory for creating new queues
 type PoolQueue func(ctx context.Context, capacity int) Queue
@@ -34,6 +35,7 @@ type jobCall interface {
 	Priority() int
 }
 
+// Pool defines pool interface required for use on client-side
 type Pool interface {
 	// Start pool
 	Start(ctx context.Context, count int) Pool
@@ -57,6 +59,7 @@ type Pool interface {
 	Resize(count int) Pool
 }
 
+// Job defines job interface required for use on client side
 type Job interface {
 	// Set the first argument to current JobInstance
 	Bind(val bool) Job
@@ -64,15 +67,21 @@ type Job interface {
 	// Put current job to pool
 	Run(args ... interface{}) JobInstance
 
-	// Put current job to pool every
-	// time.Duration
-	// cron expression
+	// Put current job to pool every, use:
+	//
+	//    time.Duration
+	//
+	// or
+	//
+	//    "0 */5 * ? * *" // cron expression
+	//
 	RunEvery(period interface{}, args ... interface{}) (PeriodicJob, error)
 
 	// Put current job to pool with priority
 	RunWithPriority(priority int, args ... interface{}) JobInstance
 }
 
+// JobInstance defines current job instance interface required for use on client side
 type JobInstance interface {
 	// Get context
 	Context() context.Context
@@ -87,6 +96,7 @@ type JobInstance interface {
 	Wait() JobInstance
 }
 
+//
 type PeriodicJob interface {
 	// get next time to running
 	Next(time.Time) time.Time
@@ -95,7 +105,8 @@ type PeriodicJob interface {
 	Run() ()
 }
 
-type WorkerInterface interface {
+// iWorker defines all worker interface required for use in the pool
+type iWorker interface {
 	// Start worker
 	Start()
 
@@ -109,6 +120,7 @@ type WorkerInterface interface {
 	Cancel()
 }
 
+// Queue defines all queue interface required for use in the pool
 type Queue interface {
 	// get job
 	Pop() (jobCall)
@@ -132,7 +144,7 @@ type Counter interface {
 	// --i
 	Decrement()
 
-	// Waiting for counter will be equals to zero or context is closed
+	// Waits while counter value will be equals to zero or context will be done
 	Wait(context.Context)
 
 	// Get counter value

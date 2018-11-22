@@ -123,22 +123,22 @@ func (pJob *timeDurationPeriodicJob) isBusy() bool {
 }
 
 // struct for sorting jobs by next
-type NextJob struct {
+type nextJob struct {
 	Job PeriodicJob
 	Next time.Time
 }
 
 // for sort job by next
-type NextJobSorter []NextJob
+type nextJobSorter []nextJob
 
-func (n NextJobSorter) Len() int {
+func (n nextJobSorter) Len() int {
 	return len(n)
 }
 
-func (n NextJobSorter) Swap(i, j int) {
+func (n nextJobSorter) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
-func (n NextJobSorter) Less(i, j int) bool {
+func (n nextJobSorter) Less(i, j int) bool {
 	return n[i].Next.Sub(n[j].Next) < 0
 }

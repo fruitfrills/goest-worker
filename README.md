@@ -66,5 +66,5 @@ func main()  {
 see examples https://github.com/yobayob/goest-worker/tree/master/examples
 
 
-### Documentation
+### Documentationd
 godoc - https://godoc.org/github.com/fruitfrills/goest-worker
