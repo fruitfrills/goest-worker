@@ -22,7 +22,7 @@
 //
 //     var result int
 //     j.Wait()
-//     err := j.Result(&result)
+//     err := j.Results(&result)
 //     fmt.PrintLn(result) // print 4
 //
 // Stop pool
