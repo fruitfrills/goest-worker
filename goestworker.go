@@ -42,8 +42,6 @@ type pool struct {
 
 // Run worker pool
 func (backend *pool) Start(ctx context.Context, count int) Pool {
-
-
 	// create new context
 	backend.ctx, backend.cancel = context.WithCancel(ctx)
 

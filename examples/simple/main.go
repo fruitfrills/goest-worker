@@ -22,19 +22,21 @@ func div(a, b int) (int) {
 	return res
 }
 
+
 func main()  {
 	pool := worker.New().Start(context.TODO(), runtime.NumCPU())  	// create workers pool
 	sumJob := pool.NewJob(sum)
-	results, err := sumJob.Run(1111, 2156).Wait().Result()
+	var result int
+	err := sumJob.Run(1111, 2156).Wait().Results(&result)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("result is", results[0].(int))
+	fmt.Println("result is", result)
 	divJob := pool.NewJob(div)
-	results, err = divJob.Run( 144, 12).Wait().Result()
+	err = divJob.Run( 144, 12).Wait().Results(&result)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("result is", results[0].(int))
+	fmt.Println("result is", result)
 	pool.Stop()
 }

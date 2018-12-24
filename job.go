@@ -3,7 +3,7 @@ package goest_worker
 import (
 	"reflect"
 	"context"
-	"errors"
+	"github.com/pkg/errors"
 )
 
 // jobFunc is the wrapper around any function which can be execute in pool
@@ -29,16 +29,26 @@ type jobFuncInstance struct {
 // Run - running function in any arguments
 // creates JobInstance, context, parse args and put job to queue at pool
 func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
-	in := make([]reflect.Value, job.fn.Type().NumIn())
-	for i, arg := range arguments {
-		in[i] = reflect.ValueOf(arg)
-	}
+
+	// create context
 	ctx, cancel := context.WithCancel(job.pool.Context())
 	instance := &jobFuncInstance{
 		job:    job,
 		ctx:    ctx,
 		cancel: cancel,
 	}
+
+	if job.fn.Type().NumIn() != len(arguments){
+		instance.error = errors.New("invalid input parameter count")
+		instance.cancel()
+		return instance
+	}
+	in := make([]reflect.Value, job.fn.Type().NumIn())
+
+	for i, arg := range arguments {
+		in[i] = reflect.ValueOf(arg)
+	}
+
 	// if job.bind == true, set jobinstance as first argument
 	if job.bind {
 		in = append([]reflect.Value{reflect.ValueOf(instance)}, in[0:len(in)-1]...)
@@ -90,6 +100,7 @@ func (jobInstance *jobFuncInstance) Wait() JobInstance{
 	return jobInstance
 }
 
+// Get priority job
 func (jobFuncInstance *jobFuncInstance) Priority() int {
 	return jobFuncInstance.priority
 }
@@ -130,12 +141,36 @@ func (jobInstance *jobFuncInstance) Context() context.Context {
 	return jobInstance.ctx
 }
 
-// get slice of results
-func (jobInstance *jobFuncInstance) Result() ([]interface{}, error) {
-	var result []interface{}
-	for _, res := range jobInstance.results {
-		result = append(result, res.Interface())
-	}
-	return result, jobInstance.error
-}
+// get results
+func (jobInstance *jobFuncInstance) Results(args ... interface{}) error {
 
+	// check context
+	select {
+	case <- jobInstance.ctx.Done():
+		break
+	default:
+		return errors.New("task not completed")
+	}
+
+	// if has error
+	if jobInstance.error != nil {
+		return jobInstance.error
+	}
+	// check fn args
+	if jobInstance.job.fn.Type().NumOut() != len(args) {
+		return errors.Errorf("invalid output parameter count")
+	}
+
+	// prepare results
+	for i := range args {
+		if args[i] == nil {
+			continue
+		}
+		val := reflect.ValueOf(args[i]).Elem()
+		if val.Type() != jobInstance.results[i].Type() {
+			return errors.Errorf("incorect type for %v %v", val.Type(), jobInstance.results[i].Type())
+		}
+		val.Set(jobInstance.results[i])
+	}
+	return nil
+}

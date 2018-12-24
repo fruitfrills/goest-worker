@@ -5,7 +5,6 @@ import (
 	"context"
 )
 
-
 func TestNew(t *testing.T) {
 	pool := New()
 	pool.Start(context.TODO(), 8)
@@ -14,17 +13,30 @@ func TestNew(t *testing.T) {
 	})
 	j := job.Run(5,6)
 	<- j.Context().Done()
-	results, err := j.Result()
+	var result int
+	err := j.Results(&result)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
-	if len(results) != 1 {
-		t.Error("results lentgh incorrect")
-	}
-
-	if results[0].(int) != 30 {
+	if result != 30 {
 		t.Error("incorect results")
+		return
+	}
+}
+
+func Test_processor(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	q :=  ChannelQueue(ctx, 0)
+	ch := make(workerPoolType)
+	go processor(ctx, q, ch)
+
+	q.Insert(&mockJobCall{})
+	if q.Len() != 0 {
+		t.Error("failed processor")
+		return
 	}
 }
 
@@ -34,6 +46,7 @@ func TestPool_Resize(t *testing.T) {
 	pool.Resize(8)
 	if len(pool.workers) != 8 {
 		t.Error("pool worker count is not 10; pool is not increasing")
+		return
 	}
 }
 
@@ -43,6 +56,7 @@ func TestPool_Resize2(t *testing.T) {
 	pool.Resize(2)
 	if len(pool.workers) != 2 {
 		t.Error("pool worker count is not 2; pool is not reducing")
+		return
 	}
 }
 
@@ -52,5 +66,6 @@ func TestPool_Resize3(t *testing.T) {
 	pool.Resize(2)
 	if len(pool.workers) != 2 {
 		t.Error("pool worker count is not 2; pool is changed")
+		return
 	}
 }

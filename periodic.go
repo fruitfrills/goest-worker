@@ -3,17 +3,10 @@ package goest_worker
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
-	"sync"
 	"sync/atomic"
 )
 
-const (
-	job_free int32 = iota
-	job_busy
-)
-
 type cronPeriodicJob struct {
-	sync.Mutex
 	state int32
 	job   Job
 	expr  *cronexpr.Expression
@@ -25,31 +18,12 @@ func (pJob *cronPeriodicJob) Next(current time.Time) (time.Time) {
 }
 
 func (pJob *cronPeriodicJob) Run() () {
-	pJob.Lock()
-	defer pJob.Unlock()
-	if pJob.isBusy() {
-		// log.Warning
-		return
-	}
-	pJob.setState(job_busy)
-	jobInstance := pJob.job.Run(pJob.args ...)
-	go func() {
-		select {
-		case <- jobInstance.Context().Done():
-			pJob.Lock()
-			pJob.setState(job_free)
-			pJob.Unlock()
-		}
-	}()
+	pJob.job.Run(pJob.args ...)
 	return
 }
 
 func (pJob *cronPeriodicJob) setState(state int32) {
 	atomic.StoreInt32(&(pJob.state), state)
-}
-
-func (pJob *cronPeriodicJob) isBusy() bool {
-	return atomic.LoadInt32(&(pJob.state)) == job_busy
 }
 
 func NewTimeDurationJob(job Job, duration time.Duration, arguments ... interface{}) (PeriodicJob) {
@@ -71,7 +45,6 @@ func NewCronJob (job Job, expr string, arguments ... interface{}) (PeriodicJob) 
 
 type timeDurationPeriodicJob struct {
 
-	sync.Mutex
 	state    int32
 	job      Job
 	last     time.Time
@@ -88,38 +61,14 @@ func (pJob *timeDurationPeriodicJob) Next(current time.Time) (time.Time) {
 }
 
 func (pJob *timeDurationPeriodicJob) Run() () {
-	pJob.Lock()
-	defer pJob.Unlock()
-
-	// run once instance
-	if pJob.isBusy() {
-		// log.Warning
-		return
-	}
-	pJob.setState(job_busy)
 	pJob.last = time.Now()
-	jobInstance := pJob.job.Run(pJob.args ...)
-
-	go func() {
-		select {
-			case <- jobInstance.Context().Done():
-				pJob.Lock()
-				pJob.setState(job_free)
-				pJob.Unlock()
-		}
-	}()
-
+	pJob.job.Run(pJob.args ...)
 	return
 }
 
 // set state to periodic job
 func (pJob *timeDurationPeriodicJob) setState(state int32) {
 	atomic.StoreInt32(&(pJob.state), state)
-}
-
-// check busy job
-func (pJob *timeDurationPeriodicJob) isBusy() bool {
-	return atomic.LoadInt32(&(pJob.state)) == job_busy
 }
 
 // struct for sorting jobs by next

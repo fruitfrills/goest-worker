@@ -68,13 +68,8 @@ type Job interface {
 	Run(args ... interface{}) JobInstance
 
 	// Put current job to pool every, use:
-	//
-	//    time.Duration
-	//
-	// or
-	//
-	//    "0 */5 * ? * *" // cron expression
-	//
+	// time.Duration
+	// "0 */5 * ? * *" // cron expression
 	RunEvery(period interface{}, args ... interface{}) (PeriodicJob, error)
 
 	// Put current job to pool with priority
@@ -90,7 +85,7 @@ type JobInstance interface {
 	Cancel()
 
 	// Get results
-	Result() ([]interface{}, error)
+	Results(args ... interface{}) error
 
 	// Wait (<-context.Done())
 	Wait() JobInstance
