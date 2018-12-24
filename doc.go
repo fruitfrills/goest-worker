@@ -20,9 +20,10 @@
 //
 // Getting the result
 //
+//     var result int
 //     j.Wait()
-//     results, err := j.Result()
-//     fmt.PrintLn(results[0].(int)) // print 4
+//     err := j.Result(&result)
+//     fmt.PrintLn(result) // print 4
 //
 // Stop pool
 //
