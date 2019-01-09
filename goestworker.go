@@ -213,48 +213,50 @@ func periodicProcessor(ctx context.Context, periodicJobs []PeriodicJob) {
 			case <-ctx.Done():
 				return
 			default:
-				maxInterval := lastCall.Add(time.Minute)
-				queue := []nextJob{}
-			JOB_LOOP:
-				for _, job := range periodicJobs {
-					next := time.Now()
-					for {
-						next = job.Next(next)
-						// drop job if job out of interval
-						if next.Sub(maxInterval) > 0 {
-							continue JOB_LOOP
-						}
-
-						// add job to queue
-						queue = append(queue, nextJob{
-							Job:  job,
-							Next: next,
-						})
+				break
+			}
+			maxInterval := lastCall.Add(time.Minute)
+			queue := []nextJob{}
+		JOB_LOOP:
+			for _, job := range periodicJobs {
+				next := time.Now()
+				for {
+					next = job.Next(next)
+					// drop job if job out of interval
+					if next.Sub(maxInterval) > 0 {
+						continue JOB_LOOP
 					}
-				}
 
-				if len(queue) == 0 {
-					select {
-					case <-time.After(time.Second * 30):
-						continue
-					case <-ctx.Done():
-						return
-					}
-				}
-
-				// sort queue by time
-				sort.Sort(nextJobSorter(queue))
-
-				for _, pJob := range queue {
-					select {
-					case <-time.After(pJob.Next.Sub(lastCall)):
-						lastCall = time.Now()
-						pJob.Job.Run()
-					case <-ctx.Done():
-						return
-					}
+					// add job to queue
+					queue = append(queue, nextJob{
+						Job:  job,
+						Next: next,
+					})
 				}
 			}
+
+			if len(queue) == 0 {
+				select {
+				case <-time.After(time.Second * 30):
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			// sort queue by time
+			sort.Sort(nextJobSorter(queue))
+
+			for _, pJob := range queue {
+				select {
+				case <-time.After(pJob.Next.Sub(lastCall)):
+					lastCall = time.Now()
+					pJob.Job.Run()
+				case <-ctx.Done():
+					return
+				}
+			}
+
 		}
 	}()
 }

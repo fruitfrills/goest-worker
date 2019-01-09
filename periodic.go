@@ -3,11 +3,9 @@ package goest_worker
 import (
 	"github.com/gorhill/cronexpr"
 	"time"
-	"sync/atomic"
 )
 
 type cronPeriodicJob struct {
-	state int32
 	job   Job
 	expr  *cronexpr.Expression
 	args  []interface{}
@@ -20,10 +18,6 @@ func (pJob *cronPeriodicJob) Next(current time.Time) (time.Time) {
 func (pJob *cronPeriodicJob) Run() () {
 	pJob.job.Run(pJob.args ...)
 	return
-}
-
-func (pJob *cronPeriodicJob) setState(state int32) {
-	atomic.StoreInt32(&(pJob.state), state)
 }
 
 func NewTimeDurationJob(job Job, duration time.Duration, arguments ... interface{}) (PeriodicJob) {
@@ -44,8 +38,6 @@ func NewCronJob (job Job, expr string, arguments ... interface{}) (PeriodicJob) 
 }
 
 type timeDurationPeriodicJob struct {
-
-	state    int32
 	job      Job
 	last     time.Time
 	duration time.Duration
@@ -64,11 +56,6 @@ func (pJob *timeDurationPeriodicJob) Run() () {
 	pJob.last = time.Now()
 	pJob.job.Run(pJob.args ...)
 	return
-}
-
-// set state to periodic job
-func (pJob *timeDurationPeriodicJob) setState(state int32) {
-	atomic.StoreInt32(&(pJob.state), state)
 }
 
 // struct for sorting jobs by next

@@ -171,26 +171,26 @@ func (bh *prioirityQueue) remove(node *jobHeapNode) *jobHeapNode {
 	return node
 }
 
-func (bh*prioirityQueue) insertJob(job jobCall) {
+func (bh *prioirityQueue) insertJob(job jobCall) {
 	atomic.AddUint64(&bh.size, 1)
 	newnode := bh.newJobHeapNode(job)
 	bh.insert(newnode)
 }
 
-func (bh*prioirityQueue) Len() uint64 {
+func (bh *prioirityQueue) Len() uint64 {
 	return atomic.LoadUint64(&bh.size)
 }
 
 func (bh *prioirityQueue) insert(newnode *jobHeapNode) {
 	srnode := getNodeWithPriority(bh.head, newnode.priority)
-
 	if srnode == nil {
 		insertIntoLinkedList(&bh.head, newnode)
-	} else {
-		removeFromLinkedList(&bh.head, srnode)
-		linkednode := linkNodes(srnode, newnode)
-		bh.insert(linkednode)
+		return
 	}
+	removeFromLinkedList(&bh.head, srnode)
+	linkednode := linkNodes(srnode, newnode)
+	bh.insert(linkednode)
+
 }
 
 func (heap *jobHeapNode) setChild (child *jobHeapNode) {
@@ -217,11 +217,10 @@ func linkNodes(n1 *jobHeapNode, n2 *jobHeapNode) *jobHeapNode {
 		n1.priority += 1
 		n1.setChild(n2)
 		return n1
-	} else {
-		n2.priority += 1
-		n2.setChild(n1)
-		return n2
 	}
+	n2.priority += 1
+	n2.setChild(n1)
+	return n2
 }
 
 func insertIntoLinkedList(head **jobHeapNode, node *jobHeapNode) {

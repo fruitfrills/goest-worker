@@ -37,13 +37,17 @@ func (job *jobFunc) Run(arguments ... interface{}) (JobInstance) {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-
-	if job.fn.Type().NumIn() != len(arguments){
+	numIn := job.fn.Type().NumIn()
+	lenArgs := len(arguments)
+	if job.bind == true {
+		lenArgs += 1
+	}
+	if numIn != lenArgs{
 		instance.error = errors.New("invalid input parameter count")
 		instance.cancel()
 		return instance
 	}
-	in := make([]reflect.Value, job.fn.Type().NumIn())
+	in := make([]reflect.Value, numIn)
 
 	for i, arg := range arguments {
 		in[i] = reflect.ValueOf(arg)
